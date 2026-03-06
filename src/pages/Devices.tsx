@@ -1,0 +1,517 @@
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Monitor, Search, Filter, X, Plus, Upload } from "lucide-react";
+import * as XLSX from "xlsx";
+import { toast } from "sonner";
+import StatusBadge from "@/components/StatusBadge";
+import type { Device } from "@/data/mockData";
+import { mockDevices } from "@/data/mockData";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
+
+const DEFAULT_DEVICE_VALUES: Omit<Device, "id" | "serialNumber" | "patientName" | "assignedCaregiver" | "status"> = {
+  remainingPouches: 30,
+  totalPouches: 30,
+  refillThreshold: 5,
+  lastDispensed: "",
+  issueDate: new Date().toISOString().slice(0, 10),
+  validityDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  pharmacyName: "MedCare Pharmacy",
+};
+
+function parseExcelToDevices(file: File, existingIds: Set<string>): Promise<Device[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        if (!data || typeof data !== "object" || !(data instanceof ArrayBuffer)) {
+          reject(new Error("Could not read file"));
+          return;
+        }
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" }) as string[][];
+        if (rows.length < 2) {
+          resolve([]);
+          return;
+        }
+        const header = rows[0].map((h) => String(h ?? "").trim().toLowerCase().replace(/\s+/g, " "));
+        const col = (key: string) => header.findIndex((h) => h.includes(key));
+        const deviceIdCol = header.findIndex((h) => h.includes("device") && h.includes("id")) >= 0
+          ? header.findIndex((h) => h.includes("device") && h.includes("id"))
+          : col("id");
+        const serialCol = col("serial") >= 0 ? col("serial") : header.findIndex((h) => h === "serial number" || h === "serial");
+        const patientCol = col("patient") >= 0 ? col("patient") : header.findIndex((h) => h === "patient name" || h === "patient");
+        const caregiverCol = col("caregiver") >= 0 ? col("caregiver") : header.findIndex((h) => h === "assigned caregiver" || h === "caregiver");
+        const statusCol = header.findIndex((h) => h === "status");
+
+        const devices: Device[] = [];
+        const statusOptions = ["online", "offline", "error", "stopped"] as const;
+        let nextNum = Math.max(0, ...Array.from(existingIds).map((id) => {
+          const m = id.match(/^DEV-(\d+)$/);
+          return m ? parseInt(m[1], 10) : 0;
+        }));
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const idRaw = deviceIdCol >= 0 ? row[deviceIdCol] : undefined;
+          const serial = serialCol >= 0 ? String(row[serialCol] ?? "").trim() : "";
+          const patient = patientCol >= 0 ? String(row[patientCol] ?? "").trim() : "";
+          const caregiver = caregiverCol >= 0 ? String(row[caregiverCol] ?? "").trim() : "";
+          const statusVal = statusCol >= 0 ? String(row[statusCol] ?? "").trim().toLowerCase() : "";
+
+          let id: string;
+          if (idRaw != null && String(idRaw).trim()) {
+            id = String(idRaw).trim();
+          } else {
+            nextNum += 1;
+            id = `DEV-${String(nextNum).padStart(3, "0")}`;
+          }
+          if (existingIds.has(id)) continue;
+          existingIds.add(id);
+
+          const status: Device["status"] = statusOptions.includes(statusVal as Device["status"]) ? (statusVal as Device["status"]) : "offline";
+
+          devices.push({
+            id,
+            serialNumber: serial || `SN-${id}`,
+            patientName: patient || "—",
+            assignedCaregiver: caregiver || "—",
+            status,
+            ...DEFAULT_DEVICE_VALUES,
+          });
+        }
+        resolve(devices);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+const Devices: React.FC = () => {
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [devices, setDevices] = useState<Device[]>(() => [...mockDevices]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [addOneOpen, setAddOneOpen] = useState(false);
+  const [addOneForm, setAddOneForm] = useState({
+    id: "",
+    serialNumber: "",
+    patientName: "",
+    assignedCaregiver: "",
+    status: "offline" as Device["status"],
+  });
+
+  const filtered = useMemo(
+    () =>
+      devices.filter((d) => {
+        const matchesSearch =
+          d.patientName.toLowerCase().includes(search.trim().toLowerCase()) ||
+          d.id.toLowerCase().includes(search.trim().toLowerCase()) ||
+          d.serialNumber.toLowerCase().includes(search.trim().toLowerCase());
+        if (!matchesSearch) return false;
+        if (statusFilter !== "all" && d.status !== statusFilter) return false;
+        return true;
+      }),
+    [devices, search, statusFilter]
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+
+  React.useEffect(() => {
+    if (page > totalPages && totalPages >= 1) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const paginated = useMemo(
+    () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filtered, safePage, pageSize]
+  );
+
+  const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const endItem = Math.min(safePage * pageSize, filtered.length);
+
+  const hasActiveFilters = search.trim().length > 0 || statusFilter !== "all";
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setStatusFilter("all");
+    setPage(1);
+  }, []);
+
+  const openAddOne = useCallback(() => {
+    setAddOneForm({
+      id: "",
+      serialNumber: "",
+      patientName: "",
+      assignedCaregiver: "",
+      status: "offline",
+    });
+    setAddOneOpen(true);
+  }, []);
+
+  const submitAddOne = useCallback(() => {
+    const id = addOneForm.id.trim();
+    const serialNumber = addOneForm.serialNumber.trim() || `SN-${id}`;
+    const patientName = addOneForm.patientName.trim() || "—";
+    const assignedCaregiver = addOneForm.assignedCaregiver.trim() || "—";
+    if (!id) {
+      toast.error("Device ID is required");
+      return;
+    }
+    const exists = devices.some((d) => d.id === id);
+    if (exists) {
+      toast.error("A device with this ID already exists");
+      return;
+    }
+    setDevices((prev) => [
+      ...prev,
+      {
+        id,
+        serialNumber,
+        patientName,
+        assignedCaregiver,
+        status: addOneForm.status,
+        ...DEFAULT_DEVICE_VALUES,
+      },
+    ]);
+    setAddOneOpen(false);
+    toast.success("Device added");
+  }, [addOneForm, devices]);
+
+  const handleMultipleFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      const name = file.name.toLowerCase();
+      if (!name.endsWith(".xlsx") && !name.endsWith(".xls")) {
+        toast.error("Please upload an Excel file (.xlsx or .xls)");
+        return;
+      }
+      try {
+        const existingIds = new Set(devices.map((d) => d.id));
+        const newDevices = await parseExcelToDevices(file, existingIds);
+        if (newDevices.length === 0) {
+          toast.warning("No valid device rows found in the file. Ensure the first row has headers (e.g. Device ID, Serial, Patient, Caregiver).");
+          return;
+        }
+        setDevices((prev) => [...prev, ...newDevices]);
+        toast.success(`${newDevices.length} device(s) added from file`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to read Excel file");
+      }
+    },
+    [devices]
+  );
+
+  return (
+    <div className="space-y-6 animate-slide-in">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Devices</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage registered hardware devices</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button variant="outline" onClick={openAddOne} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add one device
+          </Button>
+          <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
+            <Upload className="h-4 w-4" />
+            Add multiple devices
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            aria-label="Upload Excel file"
+            onChange={handleMultipleFile}
+          />
+        </div>
+      </div>
+
+      {/* Add one device dialog */}
+      <Dialog open={addOneOpen} onOpenChange={setAddOneOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add one device</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="device-id">Device ID</Label>
+              <Input
+                id="device-id"
+                placeholder="e.g. DEV-007"
+                value={addOneForm.id}
+                onChange={(e) => setAddOneForm((f) => ({ ...f, id: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="serial">Serial number</Label>
+              <Input
+                id="serial"
+                placeholder="e.g. SN-2024-00107"
+                value={addOneForm.serialNumber}
+                onChange={(e) => setAddOneForm((f) => ({ ...f, serialNumber: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="patient">Patient name</Label>
+              <Input
+                id="patient"
+                placeholder="Patient name"
+                value={addOneForm.patientName}
+                onChange={(e) => setAddOneForm((f) => ({ ...f, patientName: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="caregiver">Assigned caregiver</Label>
+              <Input
+                id="caregiver"
+                placeholder="Caregiver name"
+                value={addOneForm.assignedCaregiver}
+                onChange={(e) => setAddOneForm((f) => ({ ...f, assignedCaregiver: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select
+                value={addOneForm.status}
+                onValueChange={(v: Device["status"]) => setAddOneForm((f) => ({ ...f, status: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="online">Online</SelectItem>
+                  <SelectItem value="offline">Offline</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="stopped">Stopped</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOneOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submitAddOne}>Add device</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Search and filters toolbar */}
+      <div className="rounded-xl border bg-card p-4 shadow-card">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search devices..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className="pl-9 pr-9"
+              aria-label="Search devices"
+            />
+            {search.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={() => { setSearch(""); setPage(1); }}
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Status:</span>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All status</SelectItem>
+                <SelectItem value="online">Online</SelectItem>
+                <SelectItem value="offline">Offline</SelectItem>
+                <SelectItem value="error">Error</SelectItem>
+                <SelectItem value="stopped">Stopped</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+        {hasActiveFilters && (
+          <p className="text-xs text-muted-foreground mt-2">
+            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
+          </p>
+        )}
+      </div>
+
+      {devices.length === 0 && (
+        <div className="rounded-xl border border-dashed bg-card p-12 text-center">
+          <Monitor className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h2 className="mt-4 text-lg font-semibold text-foreground">No devices yet</h2>
+          <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
+            Add one device or upload an Excel file to add multiple devices.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 mt-4">
+            <Button variant="outline" onClick={openAddOne} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add one device
+            </Button>
+            <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Add multiple devices
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              aria-label="Upload Excel file"
+              onChange={handleMultipleFile}
+            />
+          </div>
+        </div>
+      )}
+
+      {devices.length > 0 && hasActiveFilters && filtered.length === 0 && (
+        <div className="rounded-xl border bg-card p-12 text-center">
+          <Search className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching devices</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
+          <Button variant="outline" className="mt-4" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        </div>
+      )}
+
+      {devices.length > 0 && !(hasActiveFilters && filtered.length === 0) && (
+        <div className="rounded-xl border bg-card shadow-card overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Serial</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Patient</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Pouches</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Caregiver</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {paginated.map((device) => (
+                <tr
+                  key={device.id}
+                  className="hover:bg-muted/30 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/devices/${device.id}`)}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Monitor className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium text-card-foreground">{device.id}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">{device.serialNumber}</td>
+                  <td className="px-4 py-3 text-sm text-card-foreground">{device.patientName}</td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${(device.remainingPouches / device.totalPouches) * 100}%`,
+                            backgroundColor: device.remainingPouches <= device.refillThreshold ? "hsl(var(--destructive))" : "hsl(var(--success))",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{device.remainingPouches}/{device.totalPouches}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">{device.assignedCaregiver}</td>
+                  <td className="px-4 py-3"><StatusBadge status={device.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(Number(v));
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[70px] h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Showing {startItem} to {endItem} of {filtered.length} results
+            </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted-foreground px-1">
+                  Page {safePage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Devices;
