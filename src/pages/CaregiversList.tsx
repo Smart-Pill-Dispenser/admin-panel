@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, Search, Eye, Filter, X } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -21,13 +23,44 @@ import {
 } from "@/components/ui/select";
 import StatusBadge from "@/components/StatusBadge";
 import type { Caregiver } from "@/data/mockData";
-import { mockCaregivers } from "@/data/mockData";
+import { adminApi } from "@/api/admin";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
+function mapApiCaregiverToCaregiver(api: { id: string; name: string; email: string; isActive: boolean; linkedDeviceIds?: string[] }): Caregiver {
+  return {
+    id: api.id,
+    name: api.name,
+    email: api.email,
+    phone: "—",
+    linkedDevices: api.linkedDeviceIds ?? [],
+    status: api.isActive ? "active" : "inactive",
+  };
+}
+
 const CaregiversList: React.FC = () => {
   const navigate = useNavigate();
-  const [caregivers, setCaregivers] = useState<Caregiver[]>(() => [...mockCaregivers]);
+  const queryClient = useQueryClient();
+  const { data: caregiversData, isLoading } = useQuery({
+    queryKey: ["admin", "caregivers"],
+    queryFn: () => adminApi.getCaregivers({ limit: 500 }),
+  });
+
+  const caregivers: Caregiver[] = useMemo(
+    () => (caregiversData?.items ?? []).map(mapApiCaregiverToCaregiver),
+    [caregiversData]
+  );
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      adminApi.updateCaregiverStatus(id, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "caregivers"] });
+      toast.success("Caregiver status updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [page, setPage] = useState(1);
@@ -59,11 +92,12 @@ const CaregiversList: React.FC = () => {
     [filtered, safePage, pageSize]
   );
 
-  const setCaregiverStatus = useCallback((id: string, status: "active" | "inactive") => {
-    setCaregivers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status } : c))
-    );
-  }, []);
+  const setCaregiverStatus = useCallback(
+    (id: string, status: "active" | "inactive") => {
+      updateStatus.mutate({ id, isActive: status === "active" });
+    },
+    [updateStatus]
+  );
 
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(safePage * pageSize, filtered.length);
@@ -86,6 +120,12 @@ const CaregiversList: React.FC = () => {
           View details and enable or disable caregiver access.
         </p>
       </div>
+
+      {isLoading && (
+        <div className="rounded-xl border bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">Loading caregivers…</p>
+        </div>
+      )}
 
       {/* Search and filters toolbar */}
       <div className="rounded-xl border bg-card p-4 shadow-card">
@@ -148,7 +188,7 @@ const CaregiversList: React.FC = () => {
         )}
       </div>
 
-      {isEmpty && (
+      {!isLoading && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Users className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No caregivers yet</h2>
@@ -158,7 +198,7 @@ const CaregiversList: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && hasNoResults && (
+      {!isLoading && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching caregivers</h2>
@@ -169,7 +209,7 @@ const CaregiversList: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && !hasNoResults && (
+      {!isLoading && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <Table>
             <TableHeader>
@@ -222,6 +262,7 @@ const CaregiversList: React.FC = () => {
                       </Button>
                       <Switch
                         checked={caregiver.status === "active"}
+                        disabled={updateStatus.isPending}
                         onCheckedChange={(checked) =>
                           setCaregiverStatus(caregiver.id, checked ? "active" : "inactive")
                         }

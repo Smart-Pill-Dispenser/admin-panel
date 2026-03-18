@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, Search, Eye, Filter, X } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -21,13 +23,42 @@ import {
 } from "@/components/ui/select";
 import StatusBadge from "@/components/StatusBadge";
 import type { Pharmacy } from "@/data/mockData";
-import { mockPharmacies } from "@/data/mockData";
+import { adminApi } from "@/api/admin";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
+function mapApiPharmacyToPharmacy(api: { id: string; name: string; email: string; enabled: boolean }): Pharmacy {
+  return {
+    id: api.id,
+    name: api.name,
+    email: api.email,
+    status: api.enabled ? "active" : "inactive",
+  };
+}
+
 const PharmacyList: React.FC = () => {
   const navigate = useNavigate();
-  const [pharmacies, setPharmacies] = useState<Pharmacy[]>(() => [...mockPharmacies]);
+  const queryClient = useQueryClient();
+  const { data: pharmaciesData, isLoading } = useQuery({
+    queryKey: ["admin", "pharmacies"],
+    queryFn: () => adminApi.getPharmacies({ limit: 500 }),
+  });
+
+  const pharmacies: Pharmacy[] = useMemo(
+    () => (pharmaciesData?.items ?? []).map(mapApiPharmacyToPharmacy),
+    [pharmaciesData]
+  );
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      adminApi.updatePharmacyStatus(id, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "pharmacies"] });
+      toast.success("Pharmacy status updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [page, setPage] = useState(1);
@@ -58,11 +89,12 @@ const PharmacyList: React.FC = () => {
     [filtered, safePage, pageSize]
   );
 
-  const setPharmacyStatus = useCallback((id: string, status: "active" | "inactive") => {
-    setPharmacies((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status } : p))
-    );
-  }, []);
+  const setPharmacyStatus = useCallback(
+    (id: string, status: "active" | "inactive") => {
+      updateStatus.mutate({ id, enabled: status === "active" });
+    },
+    [updateStatus]
+  );
 
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(safePage * pageSize, filtered.length);
@@ -85,6 +117,12 @@ const PharmacyList: React.FC = () => {
           View details and enable or disable pharmacy access.
         </p>
       </div>
+
+      {isLoading && (
+        <div className="rounded-xl border bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">Loading pharmacies…</p>
+        </div>
+      )}
 
       {/* Search and filters toolbar */}
       <div className="rounded-xl border bg-card p-4 shadow-card">
@@ -147,7 +185,7 @@ const PharmacyList: React.FC = () => {
         )}
       </div>
 
-      {isEmpty && (
+      {!isLoading && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Building2 className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No pharmacies yet</h2>
@@ -157,7 +195,7 @@ const PharmacyList: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && hasNoResults && (
+      {!isLoading && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching pharmacies</h2>
@@ -168,7 +206,7 @@ const PharmacyList: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && !hasNoResults && (
+      {!isLoading && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <Table>
             <TableHeader>
@@ -211,6 +249,7 @@ const PharmacyList: React.FC = () => {
                       </Button>
                       <Switch
                         checked={pharmacy.status === "active"}
+                        disabled={updateStatus.isPending}
                         onCheckedChange={(checked) =>
                           setPharmacyStatus(pharmacy.id, checked ? "active" : "inactive")
                         }

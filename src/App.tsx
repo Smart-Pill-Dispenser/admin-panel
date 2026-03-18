@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
+import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import Devices from "@/pages/Devices";
 import DeviceDetail from "@/pages/DeviceDetail";
@@ -37,6 +38,7 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
 const AppRoutes = () => (
   <Routes>
     <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+    <Route path="/reset-password" element={<ResetPassword />} />
     <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
       <Route index element={<Dashboard />} />
       <Route path="devices" element={<Devices />} />

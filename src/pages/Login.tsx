@@ -1,34 +1,73 @@
 import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { AdminApiError } from "@/api/client";
+import { adminApi } from "@/api/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pill } from "lucide-react";
+import { Pill, Eye, EyeOff, ArrowLeft } from "lucide-react";
+
+type Step = "login" | "forgot-request";
 
 const Login: React.FC = () => {
   const { login } = useAuth();
+  const [step, setStep] = useState<Step>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError("Please enter both email and password");
+    if (step === "login") {
+      if (!email || !password) {
+        setError("Please enter both email and password");
+        return;
+      }
+      setLoading(true);
+      setError("");
+      setSuccess("");
+      try {
+        const ok = await login(email, password);
+        if (!ok) setError("Invalid email or password.");
+      } catch (e) {
+        setError(e instanceof AdminApiError ? e.message : "Login failed. Please try again.");
+      } finally {
+        setLoading(false);
+      }
       return;
     }
-    setLoading(true);
-    setError("");
-    try {
-      await login(email, password);
-    } catch {
-      setError("Login failed. Please try again.");
-    } finally {
-      setLoading(false);
+    if (step === "forgot-request") {
+      if (!email?.trim()) {
+        setError("Please enter your email");
+        return;
+      }
+      setLoading(true);
+      setError("");
+      setSuccess("");
+      try {
+        await adminApi.forgotPassword(email.trim());
+        setSuccess("If an account exists for this email, you will receive a reset link. Check your inbox and spam.");
+      } catch (e) {
+        setError(e instanceof AdminApiError ? e.message : "Failed to send reset link.");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
+  const goToForgot = () => {
+    setStep("forgot-request");
+    setError("");
+    setSuccess("");
+  };
+  const backToLogin = () => {
+    setStep("login");
+    setError("");
+    setSuccess("");
+  };
   return (
     <div className="flex min-h-screen">
       {/* Left panel */}
@@ -56,8 +95,27 @@ const Login: React.FC = () => {
             <span className="text-xl font-bold text-foreground">Navos ZET</span>
           </div>
 
-          <h2 className="mb-2 text-2xl font-bold text-foreground">Welcome back</h2>
-          <p className="mb-8 text-muted-foreground">Sign in to Navos ZET</p>
+          <h2 className="mb-2 text-2xl font-bold text-foreground">
+            {step === "login" && "Welcome back"}
+            {step === "forgot-request" && "Reset password"}
+          </h2>
+          <p className="mb-8 text-muted-foreground">
+            {step === "login" && "Sign in to Navos ZET"}
+            {step === "forgot-request" && "Enter your email to receive a reset link."}
+          </p>
+
+          {step === "forgot-request" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mb-4 -ml-2 text-muted-foreground hover:text-foreground"
+              onClick={backToLogin}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to sign in
+            </Button>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
@@ -69,27 +127,59 @@ const Login: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-11"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-11"
+                disabled={false}
               />
             </div>
 
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
+            {step === "login" && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-11 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-11 w-10 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
             )}
 
-            <Button type="submit" className="w-full h-11" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {success && <p className="text-sm text-green-600 dark:text-green-400">{success}</p>}
+
+            {step === "login" && (
+              <div className="flex flex-col gap-3">
+                <Button type="submit" className="w-full h-11" disabled={loading}>
+                  {loading ? "Signing in..." : "Sign In"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="w-full text-muted-foreground h-11"
+                  onClick={goToForgot}
+                >
+                  Forgot password?
+                </Button>
+              </div>
+            )}
+            {step === "forgot-request" && (
+              <Button type="submit" className="w-full h-11" disabled={loading}>
+                {loading ? "Sending..." : "Send reset link"}
+              </Button>
+            )}
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">

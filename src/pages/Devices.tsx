@@ -1,123 +1,32 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Monitor, Search, Filter, X, Plus, Upload } from "lucide-react";
-import * as XLSX from "xlsx";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { Monitor, Search, Filter, X } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import type { Device } from "@/data/mockData";
-import { mockDevices } from "@/data/mockData";
 import { Input } from "@/components/ui/input";
+import { adminApi } from "@/api/admin";
+import { mapApiDeviceToDevice } from "@/api/deviceMappers";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
-
-const DEFAULT_DEVICE_VALUES: Omit<Device, "id" | "serialNumber" | "patientName" | "assignedCaregiver" | "status"> = {
-  remainingPouches: 30,
-  totalPouches: 30,
-  refillThreshold: 5,
-  lastDispensed: "",
-  issueDate: new Date().toISOString().slice(0, 10),
-  validityDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-  pharmacyName: "MedCare Pharmacy",
-};
-
-function parseExcelToDevices(file: File, existingIds: Set<string>): Promise<Device[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        if (!data || typeof data !== "object" || !(data instanceof ArrayBuffer)) {
-          reject(new Error("Could not read file"));
-          return;
-        }
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1, defval: "" }) as string[][];
-        if (rows.length < 2) {
-          resolve([]);
-          return;
-        }
-        const header = rows[0].map((h) => String(h ?? "").trim().toLowerCase().replace(/\s+/g, " "));
-        const col = (key: string) => header.findIndex((h) => h.includes(key));
-        const deviceIdCol = header.findIndex((h) => h.includes("device") && h.includes("id")) >= 0
-          ? header.findIndex((h) => h.includes("device") && h.includes("id"))
-          : col("id");
-        const serialCol = col("serial") >= 0 ? col("serial") : header.findIndex((h) => h === "serial number" || h === "serial");
-        const patientCol = col("patient") >= 0 ? col("patient") : header.findIndex((h) => h === "patient name" || h === "patient");
-        const caregiverCol = col("caregiver") >= 0 ? col("caregiver") : header.findIndex((h) => h === "assigned caregiver" || h === "caregiver");
-        const statusCol = header.findIndex((h) => h === "status");
-
-        const devices: Device[] = [];
-        const statusOptions = ["online", "offline", "error", "stopped"] as const;
-        let nextNum = Math.max(0, ...Array.from(existingIds).map((id) => {
-          const m = id.match(/^DEV-(\d+)$/);
-          return m ? parseInt(m[1], 10) : 0;
-        }));
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          const idRaw = deviceIdCol >= 0 ? row[deviceIdCol] : undefined;
-          const serial = serialCol >= 0 ? String(row[serialCol] ?? "").trim() : "";
-          const patient = patientCol >= 0 ? String(row[patientCol] ?? "").trim() : "";
-          const caregiver = caregiverCol >= 0 ? String(row[caregiverCol] ?? "").trim() : "";
-          const statusVal = statusCol >= 0 ? String(row[statusCol] ?? "").trim().toLowerCase() : "";
-
-          let id: string;
-          if (idRaw != null && String(idRaw).trim()) {
-            id = String(idRaw).trim();
-          } else {
-            nextNum += 1;
-            id = `DEV-${String(nextNum).padStart(3, "0")}`;
-          }
-          if (existingIds.has(id)) continue;
-          existingIds.add(id);
-
-          const status: Device["status"] = statusOptions.includes(statusVal as Device["status"]) ? (statusVal as Device["status"]) : "offline";
-
-          devices.push({
-            id,
-            serialNumber: serial || `SN-${id}`,
-            patientName: patient || "—",
-            assignedCaregiver: caregiver || "—",
-            status,
-            ...DEFAULT_DEVICE_VALUES,
-          });
-        }
-        resolve(devices);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsArrayBuffer(file);
-  });
-}
 
 const Devices: React.FC = () => {
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [devices, setDevices] = useState<Device[]>(() => [...mockDevices]);
+  const { data: devicesData, isLoading } = useQuery({
+    queryKey: ["admin", "devices"],
+    queryFn: () => adminApi.getDevices({ limit: 500 }),
+  });
+
+  const devices: Device[] = useMemo(
+    () => (devicesData?.items ?? []).map(mapApiDeviceToDevice),
+    [devicesData]
+  );
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [addOneOpen, setAddOneOpen] = useState(false);
-  const [addOneForm, setAddOneForm] = useState({
-    id: "",
-    serialNumber: "",
-    patientName: "",
-    assignedCaregiver: "",
-    status: "offline" as Device["status"],
-  });
 
   const filtered = useMemo(
     () =>
@@ -155,72 +64,6 @@ const Devices: React.FC = () => {
     setPage(1);
   }, []);
 
-  const openAddOne = useCallback(() => {
-    setAddOneForm({
-      id: "",
-      serialNumber: "",
-      patientName: "",
-      assignedCaregiver: "",
-      status: "offline",
-    });
-    setAddOneOpen(true);
-  }, []);
-
-  const submitAddOne = useCallback(() => {
-    const id = addOneForm.id.trim();
-    const serialNumber = addOneForm.serialNumber.trim() || `SN-${id}`;
-    const patientName = addOneForm.patientName.trim() || "—";
-    const assignedCaregiver = addOneForm.assignedCaregiver.trim() || "—";
-    if (!id) {
-      toast.error("Device ID is required");
-      return;
-    }
-    const exists = devices.some((d) => d.id === id);
-    if (exists) {
-      toast.error("A device with this ID already exists");
-      return;
-    }
-    setDevices((prev) => [
-      ...prev,
-      {
-        id,
-        serialNumber,
-        patientName,
-        assignedCaregiver,
-        status: addOneForm.status,
-        ...DEFAULT_DEVICE_VALUES,
-      },
-    ]);
-    setAddOneOpen(false);
-    toast.success("Device added");
-  }, [addOneForm, devices]);
-
-  const handleMultipleFile = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
-      if (!file) return;
-      const name = file.name.toLowerCase();
-      if (!name.endsWith(".xlsx") && !name.endsWith(".xls")) {
-        toast.error("Please upload an Excel file (.xlsx or .xls)");
-        return;
-      }
-      try {
-        const existingIds = new Set(devices.map((d) => d.id));
-        const newDevices = await parseExcelToDevices(file, existingIds);
-        if (newDevices.length === 0) {
-          toast.warning("No valid device rows found in the file. Ensure the first row has headers (e.g. Device ID, Serial, Patient, Caregiver).");
-          return;
-        }
-        setDevices((prev) => [...prev, ...newDevices]);
-        toast.success(`${newDevices.length} device(s) added from file`);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to read Excel file");
-      }
-    },
-    [devices]
-  );
-
   return (
     <div className="space-y-6 animate-slide-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -228,95 +71,7 @@ const Devices: React.FC = () => {
           <h1 className="text-2xl font-bold text-foreground">Devices</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage registered hardware devices</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <Button variant="outline" onClick={openAddOne} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add one device
-          </Button>
-          <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
-            <Upload className="h-4 w-4" />
-            Add multiple devices
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            aria-label="Upload Excel file"
-            onChange={handleMultipleFile}
-          />
-        </div>
       </div>
-
-      {/* Add one device dialog */}
-      <Dialog open={addOneOpen} onOpenChange={setAddOneOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add one device</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="device-id">Device ID</Label>
-              <Input
-                id="device-id"
-                placeholder="e.g. DEV-007"
-                value={addOneForm.id}
-                onChange={(e) => setAddOneForm((f) => ({ ...f, id: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="serial">Serial number</Label>
-              <Input
-                id="serial"
-                placeholder="e.g. SN-2024-00107"
-                value={addOneForm.serialNumber}
-                onChange={(e) => setAddOneForm((f) => ({ ...f, serialNumber: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="patient">Patient name</Label>
-              <Input
-                id="patient"
-                placeholder="Patient name"
-                value={addOneForm.patientName}
-                onChange={(e) => setAddOneForm((f) => ({ ...f, patientName: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="caregiver">Assigned caregiver</Label>
-              <Input
-                id="caregiver"
-                placeholder="Caregiver name"
-                value={addOneForm.assignedCaregiver}
-                onChange={(e) => setAddOneForm((f) => ({ ...f, assignedCaregiver: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Status</Label>
-              <Select
-                value={addOneForm.status}
-                onValueChange={(v: Device["status"]) => setAddOneForm((f) => ({ ...f, status: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="online">Online</SelectItem>
-                  <SelectItem value="offline">Offline</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
-                  <SelectItem value="stopped">Stopped</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOneOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={submitAddOne}>Add device</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Search and filters toolbar */}
       <div className="rounded-xl border bg-card p-4 shadow-card">
@@ -372,35 +127,23 @@ const Devices: React.FC = () => {
         )}
       </div>
 
-      {devices.length === 0 && (
+      {isLoading && (
+        <div className="rounded-xl border bg-card p-12 text-center">
+          <p className="text-sm text-muted-foreground">Loading devices…</p>
+        </div>
+      )}
+
+      {!isLoading && devices.length === 0 && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Monitor className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No devices yet</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            Add one device or upload an Excel file to add multiple devices.
+            Devices are loaded from the admin backend. Use Serial upload in System Config to register new serials.
           </p>
-          <div className="flex flex-wrap justify-center gap-2 mt-4">
-            <Button variant="outline" onClick={openAddOne} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add one device
-            </Button>
-            <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
-              <Upload className="h-4 w-4" />
-              Add multiple devices
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              aria-label="Upload Excel file"
-              onChange={handleMultipleFile}
-            />
-          </div>
         </div>
       )}
 
-      {devices.length > 0 && hasActiveFilters && filtered.length === 0 && (
+      {!isLoading && devices.length > 0 && hasActiveFilters && filtered.length === 0 && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching devices</h2>
@@ -411,7 +154,7 @@ const Devices: React.FC = () => {
         </div>
       )}
 
-      {devices.length > 0 && !(hasActiveFilters && filtered.length === 0) && (
+      {!isLoading && devices.length > 0 && !(hasActiveFilters && filtered.length === 0) && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <table className="w-full">
             <thead>

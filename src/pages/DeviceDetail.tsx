@@ -1,9 +1,13 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Monitor, StopCircle, Play, AlertTriangle, Clock, Package, User, Calendar, FileText, SkipForward, Wrench, Siren, QrCode } from "lucide-react";
-import { mockDevices, getDeviceLogs } from "@/data/mockData";
 import type { ActivityLogType } from "@/data/mockData";
+import type { ActivityLog } from "@/data/mockData";
 import StatusBadge from "@/components/StatusBadge";
+import { adminApi } from "@/api/admin";
+import { mapApiDeviceToDevice } from "@/api/deviceMappers";
+import type { Device } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -36,10 +40,38 @@ const DeviceDetail: React.FC = () => {
   const [logPage, setLogPage] = useState(1);
   const [logPageSize, setLogPageSize] = useState(10);
 
-  const device = mockDevices.find((d) => d.id === id);
-  const logs = useMemo(
-    () => (id ? getDeviceLogs(id, { dateFrom: logDateFrom || undefined, dateTo: logDateTo || undefined }) : []),
-    [id, logDateFrom, logDateTo]
+  const { data: devicesData } = useQuery({
+    queryKey: ["admin", "devices"],
+    queryFn: () => adminApi.getDevices({ limit: 500 }),
+  });
+
+  const device: Device | undefined = useMemo(() => {
+    const item = devicesData?.items?.find((d) => d.id === id);
+    return item ? mapApiDeviceToDevice(item) : undefined;
+  }, [devicesData, id]);
+
+  const fromParam = logDateFrom ? `${logDateFrom}T00:00:00Z` : undefined;
+  const toParam = logDateTo ? `${logDateTo}T23:59:59Z` : undefined;
+
+  const { data: logsData } = useQuery({
+    queryKey: ["admin", "devices", id, "logs", fromParam, toParam],
+    queryFn: () =>
+      id
+        ? adminApi.getDeviceLogs(id, { limit: 200, from: fromParam, to: toParam })
+        : Promise.resolve({ items: [], count: 0 }),
+    enabled: !!id,
+  });
+
+  const logs: ActivityLog[] = useMemo(
+    () =>
+      (logsData?.items ?? []).map((item, i) => ({
+        id: `log-${i}-${item.timestamp}`,
+        deviceId: item.deviceId,
+        timestamp: new Date(item.timestamp).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }),
+        type: item.type as ActivityLog["type"],
+        description: item.message,
+      })),
+    [logsData]
   );
 
   const logTotalPages = Math.max(1, Math.ceil(logs.length / logPageSize));

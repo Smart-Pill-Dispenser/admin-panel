@@ -27,7 +27,8 @@ const AppLayout: React.FC = () => {
           collapsed ? "ml-[72px]" : "ml-[250px]"
         )}
       >
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end gap-3 border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <span className="text-sm font-medium text-muted-foreground">Admin Panel</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full" aria-label="Open profile menu">
