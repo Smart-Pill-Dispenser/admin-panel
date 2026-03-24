@@ -14,6 +14,13 @@ export interface LoginResponse {
   expiresIn?: number;
 }
 
+/** Refresh response from POST /admin/refresh */
+export interface RefreshResponse {
+  accessToken: string;
+  idToken?: string;
+  expiresIn?: number;
+}
+
 /** GET /admin/dashboard */
 export interface DashboardResponse {
   totalDevices: number;
@@ -91,6 +98,22 @@ export interface PharmaciesListResponse {
   cursor?: string;
 }
 
+/** POST /admin/pharmacies */
+export interface CreatePharmacyUserRequest {
+  name: string;
+  email: string;
+}
+
+export interface CreatePharmacyUserCredentials {
+  email: string;
+  password: string;
+}
+
+export interface CreatePharmacyUserResponse {
+  pharmacy: ApiPharmacy;
+  credentials: CreatePharmacyUserCredentials;
+}
+
 /** GET /admin/alerts/summary */
 export interface AlertsSummaryResponse {
   totalAlerts: number;
@@ -120,4 +143,34 @@ export interface SystemHealthResponse {
   backend: string;
   deviceSync?: string;
   notifications?: string;
+}
+
+/** Help request from GET /admin/help-requests */
+export interface ApiHelpRequest {
+  id: string;
+  deviceId: string;
+  timestamp: string;
+  status: "pending" | "in_progress" | "resolved";
+  description: string;
+  patientName: string;
+  resolutionReason?: string;
+  resolvedAt?: string;
+}
+
+export interface HelpRequestsListResponse {
+  items: ApiHelpRequest[];
+  count: number;
+  cursor?: string;
+}
+
+/** PATCH /admin/help-requests/{id}/resolve response */
+export interface HelpRequestResolveResponse {
+  item: ApiHelpRequest;
+}
+
+/** GET /admin/logs (global) */
+export interface GlobalLogsResponse {
+  items: ApiDeviceLog[];
+  count: number;
+  cursor?: string;
 }

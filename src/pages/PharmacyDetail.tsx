@@ -1,28 +1,49 @@
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Building2, Mail } from "lucide-react";
-import { mockPharmacies } from "@/data/mockData";
-import type { Pharmacy } from "@/data/mockData";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { adminApi } from "@/api/admin";
+import LoadingCard from "@/components/LoadingCard";
 
 const PharmacyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const pharmacyFromState = (location.state as { pharmacy?: Pharmacy })?.pharmacy;
-  const pharmacyStored = pharmacyFromState ?? mockPharmacies.find((p) => p.id === id);
-  const [pharmacy, setPharmacy] = useState<Pharmacy | undefined>(pharmacyStored);
+  const queryClient = useQueryClient();
+  const pharmacyFromState = (location.state as any)?.pharmacy as
+    | { id: string; name: string; email: string; status: "active" | "inactive" }
+    | undefined;
 
-  React.useEffect(() => {
-    const statePharmacy = (location.state as { pharmacy?: Pharmacy })?.pharmacy;
-    const next = statePharmacy ?? mockPharmacies.find((p) => p.id === id);
-    setPharmacy(next);
-  }, [id, location.state]);
+  const { data: pharmaciesData, isLoading } = useQuery({
+    queryKey: ["admin", "pharmacies"],
+    queryFn: () => adminApi.getPharmacies({ limit: 500 }),
+  });
+
+  const pharmacy = useMemo(() => {
+    if (!id) return undefined;
+    if (pharmacyFromState?.id === id) return pharmacyFromState;
+    const api = (pharmaciesData?.items ?? []).find((p) => p.id === id);
+    if (!api) return undefined;
+    return { id: api.id, name: api.name, email: api.email, status: api.enabled ? "active" : "inactive" as const };
+  }, [id, pharmaciesData, pharmacyFromState]);
+
+  const updateStatus = useMutation({
+    mutationFn: (enabled: boolean) => adminApi.updatePharmacyStatus(id!, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "pharmacies"] });
+      toast.success("Pharmacy status updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   if (!pharmacy) {
+    if (isLoading) {
+      return <LoadingCard message="Loading pharmacy…" />;
+    }
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-muted-foreground mb-4">Pharmacy not found</p>
@@ -32,11 +53,6 @@ const PharmacyDetail: React.FC = () => {
       </div>
     );
   }
-
-  const setStatus = (status: "active" | "inactive") => {
-    setPharmacy((prev) => (prev ? { ...prev, status } : prev));
-    toast.success(status === "active" ? "Pharmacy enabled" : "Pharmacy disabled");
-  };
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -92,7 +108,8 @@ const PharmacyDetail: React.FC = () => {
           <span className="text-sm text-muted-foreground">Account status</span>
           <Switch
             checked={pharmacy.status === "active"}
-            onCheckedChange={(checked) => setStatus(checked ? "active" : "inactive")}
+            onCheckedChange={(checked) => updateStatus.mutate(checked)}
+            disabled={updateStatus.isPending}
           />
         </div>
       </div>

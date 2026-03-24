@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import StatusBadge from "@/components/StatusBadge";
+import LoadingCard from "@/components/LoadingCard";
 import type { Caregiver } from "@/data/mockData";
 import { adminApi } from "@/api/admin";
 
@@ -121,12 +122,6 @@ const CaregiversList: React.FC = () => {
         </p>
       </div>
 
-      {isLoading && (
-        <div className="rounded-xl border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">Loading caregivers…</p>
-        </div>
-      )}
-
       {/* Search and filters toolbar */}
       <div className="rounded-xl border bg-card p-4 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
@@ -187,6 +182,8 @@ const CaregiversList: React.FC = () => {
           </p>
         )}
       </div>
+
+      {isLoading && <LoadingCard message="Loading caregivers…" />}
 
       {!isLoading && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">

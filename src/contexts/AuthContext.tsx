@@ -4,6 +4,7 @@ import { adminApi } from "@/api/admin";
 import { AdminApiError } from "@/api/client";
 
 const TOKEN_KEY = "admin_access_token";
+const REFRESH_KEY = "admin_refresh_token";
 const USER_KEY = "admin_user";
 
 interface AuthContextType {
@@ -47,6 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
   }, []);
 
@@ -65,6 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const displayName = email.split("@")[0] || "Admin";
       const u = { email, name: displayName, role: "admin" };
       localStorage.setItem(TOKEN_KEY, token);
+      if (res.refreshToken) localStorage.setItem(REFRESH_KEY, res.refreshToken);
       localStorage.setItem(USER_KEY, JSON.stringify(u));
       setUser(u);
       setIsAuthenticated(true);

@@ -19,8 +19,6 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { mockEngineeringLogs, mockDevices } from "@/data/mockData";
-import type { EngineeringLog } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -45,13 +43,6 @@ const statusIcon: Record<string, React.ReactNode> = {
   unknown: <HelpCircle className="h-4 w-4 text-muted-foreground" />,
 };
 
-const sourceLabel: Record<EngineeringLog["source"], string> = {
-  device: "Device",
-  app: "App",
-  backend: "Backend",
-  pharmacy: "Pharmacy",
-};
-
 const defaultSerialRow = (): SerialBulkItem => ({
   serial: "",
   batchId: "",
@@ -64,6 +55,11 @@ const SystemConfig: React.FC = () => {
   const { data: healthData, isLoading: healthLoading } = useQuery({
     queryKey: ["admin", "system", "health"],
     queryFn: () => adminApi.getSystemHealth(),
+  });
+
+  const { data: devicesData } = useQuery({
+    queryKey: ["admin", "devices", "for-system-config"],
+    queryFn: () => adminApi.getDevices({ limit: 500 }),
   });
 
   const [serialRows, setSerialRows] = useState<SerialBulkItem[]>([defaultSerialRow()]);
@@ -94,36 +90,48 @@ const SystemConfig: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [deviceFilter, setDeviceFilter] = useState<string>("all");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const { data: deviceLogsData, isLoading: logsLoading } = useQuery({
+    queryKey: ["admin", "deviceLogs", "engineering", deviceFilter],
+    queryFn: () => adminApi.getDeviceLogs(deviceFilter, { limit: 200 }),
+    enabled: deviceFilter !== "all",
+  });
+
+  const engineeringLogs = useMemo(() => {
+    if (deviceFilter === "all") return [];
+    return (deviceLogsData?.items ?? []).map((l) => ({
+      id: `${deviceFilter}:${l.timestamp}:${l.type}:${l.message}`,
+      timestamp: l.timestamp,
+      deviceId: l.deviceId || deviceFilter,
+      eventType: l.type,
+      reason: l.message,
+    }));
+  }, [deviceLogsData, deviceFilter]);
+
   const filtered = useMemo(
     () =>
-      mockEngineeringLogs.filter((log) => {
+      engineeringLogs.filter((log) => {
         const q = search.trim().toLowerCase();
         if (
           q &&
           !log.reason.toLowerCase().includes(q) &&
           !log.deviceId.toLowerCase().includes(q) &&
           !log.eventType.toLowerCase().includes(q) &&
-          !log.userFacingDescription?.toLowerCase().includes(q) &&
-          !log.serialNumber.toLowerCase().includes(q)
+          !log.timestamp.toLowerCase().includes(q)
         )
           return false;
         if (deviceFilter !== "all" && log.deviceId !== deviceFilter) return false;
-        if (sourceFilter !== "all" && log.source !== sourceFilter) return false;
-        if (statusFilter !== "all" && log.status !== statusFilter) return false;
         const logDate = parseEngLogDate(log.timestamp);
         if (dateFrom && logDate < new Date(dateFrom + "T00:00:00")) return false;
         if (dateTo && logDate > new Date(dateTo + "T23:59:59")) return false;
         return true;
       }),
-    [search, deviceFilter, sourceFilter, statusFilter, dateFrom, dateTo]
+    [engineeringLogs, search, deviceFilter, dateFrom, dateTo]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -141,20 +149,16 @@ const SystemConfig: React.FC = () => {
   const hasActiveFilters =
     search.trim().length > 0 ||
     deviceFilter !== "all" ||
-    sourceFilter !== "all" ||
-    statusFilter !== "all" ||
     dateFrom ||
     dateTo;
   const clearFilters = useCallback(() => {
     setSearch("");
     setDeviceFilter("all");
-    setSourceFilter("all");
-    setStatusFilter("all");
     setDateFrom("");
     setDateTo("");
     setPage(1);
   }, []);
-  const isEmpty = mockEngineeringLogs.length === 0;
+  const isEmpty = deviceFilter === "all" || engineeringLogs.length === 0;
   const hasNoResults = filtered.length === 0 && hasActiveFilters;
 
   return (
@@ -178,7 +182,24 @@ const SystemConfig: React.FC = () => {
           System Health
         </h2>
         {healthLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-pulse">
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="h-3 w-10 rounded bg-muted/60 dark:bg-muted/40" />
+              <div className="mt-2 h-4 w-3/5 rounded bg-muted/60 dark:bg-muted/40" />
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="h-3 w-16 rounded bg-muted/60 dark:bg-muted/40" />
+              <div className="mt-2 h-4 w-4/5 rounded bg-muted/60 dark:bg-muted/40" />
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="h-3 w-16 rounded bg-muted/60 dark:bg-muted/40" />
+              <div className="mt-2 h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40" />
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="h-3 w-20 rounded bg-muted/60 dark:bg-muted/40" />
+              <div className="mt-2 h-4 w-1/2 rounded bg-muted/60 dark:bg-muted/40" />
+            </div>
+          </div>
         ) : healthData ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border bg-muted/30 p-3">
@@ -300,7 +321,7 @@ const SystemConfig: React.FC = () => {
       <div>
         <h2 className="text-lg font-semibold text-card-foreground mb-4">Engineering logs</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Full technical logs: device response, reason, payloads. For development and debugging only.
+          This section previously showed dummy data. The backend currently exposes per-device logs (type/message/timestamp).
         </p>
       </div>
 
@@ -338,39 +359,9 @@ const SystemConfig: React.FC = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All devices</SelectItem>
-                {mockDevices.map((d) => (
+                {(devicesData?.items ?? []).map((d) => (
                   <SelectItem key={d.id} value={d.id}>{d.id}</SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Source:</span>
-            <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sources</SelectItem>
-                {(Object.keys(sourceLabel) as EngineeringLog["source"][]).map((s) => (
-                  <SelectItem key={s} value={s}>{sourceLabel[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Status:</span>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All status</SelectItem>
-                <SelectItem value="success">Success</SelectItem>
-                <SelectItem value="failure">Failure</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="timeout">Timeout</SelectItem>
-                <SelectItem value="unknown">Unknown</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -396,10 +387,23 @@ const SystemConfig: React.FC = () => {
       {isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Settings2 className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No engineering logs yet</h2>
-          <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            Full technical logs will appear here for development and debugging.
-          </p>
+          {deviceFilter !== "all" && logsLoading ? (
+            <div className="mt-4 space-y-2 animate-pulse">
+              <div className="h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40 mx-auto" />
+              <div className="h-4 w-4/5 rounded bg-muted/60 dark:bg-muted/40 mx-auto" />
+            </div>
+          ) : (
+            <>
+              <h2 className="mt-4 text-lg font-semibold text-foreground">
+                {deviceFilter === "all" ? "Select a device to view logs" : "No logs yet"}
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
+                {deviceFilter === "all"
+                  ? "Choose a device above to load logs from the backend."
+                  : "Device logs will appear here as events occur."}
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -452,17 +456,16 @@ const SystemConfig: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <Monitor className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm font-medium text-card-foreground">{log.deviceId}</span>
-                        <span className="text-xs text-muted-foreground">({log.serialNumber})</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-card-foreground uppercase tracking-wider">{log.eventType}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {statusIcon[log.status]}
-                        <span className="text-sm capitalize">{log.status}</span>
+                        {statusIcon.unknown}
+                        <span className="text-sm capitalize">—</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{sourceLabel[log.source]}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">—</td>
                     <td className="px-4 py-3 text-sm text-card-foreground max-w-[280px] truncate" title={log.reason}>
                       {log.reason}
                     </td>
@@ -471,12 +474,7 @@ const SystemConfig: React.FC = () => {
                     <tr className="bg-muted/20">
                       <td colSpan={7} className="px-4 py-4">
                         <div className="grid gap-4 sm:grid-cols-2 text-sm font-mono">
-                          <DetailBlock title="User-facing description" value={log.userFacingDescription} mono={false} />
-                          <DetailBlock title="Status code" value={log.statusCode != null ? String(log.statusCode) : "—"} />
-                          <DetailBlock title="Device response" value={log.deviceResponse ?? "—"} />
-                          <DetailBlock title="Raw message" value={log.rawMessage ?? "—"} />
-                          <DetailBlock title="Request payload" value={log.requestPayload ?? "—"} className="sm:col-span-2" />
-                          <DetailBlock title="Response payload" value={log.responsePayload ?? "—"} className="sm:col-span-2" />
+                          <DetailBlock title="Message" value={log.reason} mono={false} className="sm:col-span-2" />
                         </div>
                       </td>
                     </tr>

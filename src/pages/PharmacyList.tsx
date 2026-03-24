@@ -6,6 +6,15 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -22,7 +31,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import StatusBadge from "@/components/StatusBadge";
+import LoadingCard from "@/components/LoadingCard";
 import type { Pharmacy } from "@/data/mockData";
+import type { CreatePharmacyUserCredentials } from "@/api/types";
 import { adminApi } from "@/api/admin";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
@@ -109,20 +120,56 @@ const PharmacyList: React.FC = () => {
     setPage(1);
   }, []);
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createStep, setCreateStep] = useState<"form" | "credentials">("form");
+  const [newPharmacyName, setNewPharmacyName] = useState("");
+  const [newPharmacyEmail, setNewPharmacyEmail] = useState("");
+  const [createdCredentials, setCreatedCredentials] = useState<CreatePharmacyUserCredentials | null>(null);
+  const [createdPharmacyName, setCreatedPharmacyName] = useState<string>("");
+
+  const createPharmacyUser = useMutation({
+    mutationFn: (payload: { name: string; email: string }) => adminApi.createPharmacyUser(payload),
+    onSuccess: (data) => {
+      setCreatedCredentials(data.credentials);
+      setCreatedPharmacyName(data.pharmacy.name);
+      setCreateStep("credentials");
+      queryClient.invalidateQueries({ queryKey: ["admin", "pharmacies"] });
+      toast.success("Pharmacy user created");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openCreateDialog = () => {
+    setCreateStep("form");
+    setCreatedCredentials(null);
+    setCreatedPharmacyName("");
+    setNewPharmacyName("");
+    setNewPharmacyEmail("");
+    setCreateOpen(true);
+  };
+
+  const closeCreateDialog = () => {
+    setCreateOpen(false);
+    setCreateStep("form");
+    setCreatedCredentials(null);
+    setCreatedPharmacyName("");
+    setNewPharmacyName("");
+    setNewPharmacyEmail("");
+  };
+
   return (
     <div className="space-y-6 animate-slide-in">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Pharmacies</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          View details and enable or disable pharmacy access.
-        </p>
-      </div>
-
-      {isLoading && (
-        <div className="rounded-xl border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">Loading pharmacies…</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Pharmacies</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            View details and enable or disable pharmacy access.
+          </p>
         </div>
-      )}
+        <div>
+          <Button onClick={openCreateDialog}>Add pharmacy user</Button>
+        </div>
+      </div>
 
       {/* Search and filters toolbar */}
       <div className="rounded-xl border bg-card p-4 shadow-card">
@@ -184,6 +231,8 @@ const PharmacyList: React.FC = () => {
           </p>
         )}
       </div>
+
+      {isLoading && <LoadingCard message="Loading pharmacies…" />}
 
       {!isLoading && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
@@ -312,6 +361,82 @@ const PharmacyList: React.FC = () => {
           </div>
         </div>
       )}
+
+      <Dialog open={createOpen} onOpenChange={(open) => (!open ? closeCreateDialog() : setCreateOpen(open))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{createStep === "form" ? "Create pharmacy user" : "Credentials"}</DialogTitle>
+            <DialogDescription>
+              {createStep === "form"
+                ? "Enter pharmacy name and email. We'll generate a password and provision the Cognito user."
+                : "Copy the credentials now. After closing, you can re-open to create a new user."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {createStep === "form" ? (
+            <div className="grid gap-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="pharmacyName">Pharmacy name</Label>
+                <Input
+                  id="pharmacyName"
+                  value={newPharmacyName}
+                  onChange={(e) => setNewPharmacyName(e.target.value)}
+                  placeholder="e.g. MedCare Pharmacy"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pharmacyEmail">Pharmacy email (login)</Label>
+                <Input
+                  id="pharmacyEmail"
+                  type="email"
+                  value={newPharmacyEmail}
+                  onChange={(e) => setNewPharmacyEmail(e.target.value)}
+                  placeholder="e.g. admin@pharmacy.com"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 py-2">
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-sm text-muted-foreground">Pharmacy</div>
+                <div className="font-medium text-foreground">{createdPharmacyName}</div>
+              </div>
+              {createdCredentials && (
+                <>
+                  <div className="text-sm text-muted-foreground">Email</div>
+                  <div className="font-mono break-all text-sm">{createdCredentials.email}</div>
+                  <div className="text-sm text-muted-foreground mt-2">Password</div>
+                  <div className="font-mono break-all text-sm text-destructive">{createdCredentials.password}</div>
+                </>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            {createStep === "form" ? (
+              <>
+                <Button variant="outline" onClick={closeCreateDialog} disabled={createPharmacyUser.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!newPharmacyName.trim() || !newPharmacyEmail.trim()) {
+                      toast.error("Name and email are required");
+                      return;
+                    }
+                    createPharmacyUser.mutate({ name: newPharmacyName, email: newPharmacyEmail });
+                  }}
+                  disabled={createPharmacyUser.isPending}
+                >
+                  {createPharmacyUser.isPending ? "Creating..." : "Create"}
+                </Button>
+              </>
+            ) : (
+              <Button onClick={closeCreateDialog}>Done</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

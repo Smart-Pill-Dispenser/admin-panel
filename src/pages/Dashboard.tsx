@@ -33,15 +33,17 @@ function getDeviceStatusChartData(deviceStatus: {
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
 
-  const { data: dashboardData } = useQuery({
+  const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
     queryKey: ["admin", "dashboard"],
     queryFn: () => adminApi.getDashboard(),
   });
 
-  const { data: devicesData } = useQuery({
+  const { data: devicesData, isLoading: devicesLoading } = useQuery({
     queryKey: ["admin", "devices"],
     queryFn: () => adminApi.getDevices({ limit: 100 }),
   });
+
+  const isDashboardLoading = dashboardLoading || devicesLoading;
 
   const devices: Device[] = useMemo(
     () => (devicesData?.items ?? []).map(mapApiDeviceToDevice),
@@ -81,6 +83,7 @@ const Dashboard: React.FC = () => {
           icon={<Monitor className="h-5 w-5 text-info" />}
           trend="devices"
           variant="info"
+          loading={isDashboardLoading}
         />
         <StatCard
           title="Devices Online"
@@ -88,6 +91,7 @@ const Dashboard: React.FC = () => {
           icon={<Monitor className="h-5 w-5 text-success" />}
           trend="online"
           variant="success"
+          loading={isDashboardLoading}
         />
         <StatCard
           title="Needs Refill"
@@ -95,6 +99,7 @@ const Dashboard: React.FC = () => {
           icon={<Package className="h-5 w-5 text-warning" />}
           trend="Below threshold"
           variant="warning"
+          loading={isDashboardLoading}
         />
         <StatCard
           title="Pending Alerts"
@@ -102,6 +107,7 @@ const Dashboard: React.FC = () => {
           icon={<HelpCircle className="h-5 w-5 text-destructive" />}
           trend="Unacknowledged"
           variant="destructive"
+          loading={isDashboardLoading}
         />
       </div>
 
@@ -111,7 +117,12 @@ const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border bg-card shadow-card p-5">
             <h3 className="text-sm font-semibold text-card-foreground mb-4">Device Status Distribution</h3>
-            {deviceStatusChartData.length > 0 ? (
+            {isDashboardLoading ? (
+              <div className="p-5">
+                <div className="h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40 animate-pulse mb-4" />
+                <div className="h-[250px] w-full rounded bg-muted/30 dark:bg-muted/20 animate-pulse" />
+              </div>
+            ) : deviceStatusChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
                   <Pie

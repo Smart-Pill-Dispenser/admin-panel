@@ -1,43 +1,67 @@
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Users, Mail, Phone, Monitor } from "lucide-react";
-import { mockCaregivers } from "@/data/mockData";
-import type { Caregiver } from "@/data/mockData";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { adminApi } from "@/api/admin";
+import LoadingCard from "@/components/LoadingCard";
 
 const CaregiverDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const caregiverFromState = (location.state as { caregiver?: Caregiver })?.caregiver;
-  const caregiverStored = caregiverFromState ?? mockCaregivers.find((c) => c.id === id);
-  const [caregiver, setCaregiver] = useState<Caregiver | undefined>(caregiverStored);
+  const queryClient = useQueryClient();
+  const caregiverFromState = (location.state as any)?.caregiver as
+    | { id: string; name: string; email: string; phone?: string; linkedDevices: string[]; status: "active" | "inactive" }
+    | undefined;
 
-  // Re-sync if navigated to a different id
-  React.useEffect(() => {
-    const stateCaregiver = (location.state as { caregiver?: Caregiver })?.caregiver;
-    const next = stateCaregiver ?? mockCaregivers.find((c) => c.id === id);
-    setCaregiver(next);
-  }, [id, location.state]);
+  const { data: caregiversData, isLoading } = useQuery({
+    queryKey: ["admin", "caregivers"],
+    queryFn: () => adminApi.getCaregivers({ limit: 500 }),
+  });
+
+  const caregiver = useMemo(() => {
+    if (!id) return undefined;
+    if (caregiverFromState?.id === id) return caregiverFromState;
+    const api = (caregiversData?.items ?? []).find((c) => c.id === id);
+    if (!api) return undefined;
+    return {
+      id: api.id,
+      name: api.name,
+      email: api.email,
+      phone: "—",
+      linkedDevices: api.linkedDeviceIds ?? [],
+      status: api.isActive ? "active" : "inactive" as const,
+    };
+  }, [id, caregiverFromState, caregiversData]);
+
+  const updateStatus = useMutation({
+    mutationFn: (isActive: boolean) => adminApi.updateCaregiverStatus(id!, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "caregivers"] });
+      toast.success("Caregiver status updated");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   if (!caregiver) {
+    if (isLoading) {
+      return <LoadingCard message="Loading caregiver…" />;
+    }
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground mb-4">Caregiver not found</p>
+        <p className="text-muted-foreground mb-4">
+          Caregiver not found
+        </p>
         <Button variant="outline" onClick={() => navigate("/user-management/caregivers")}>
           Back to Caregivers
         </Button>
       </div>
     );
   }
-
-  const setStatus = (status: "active" | "inactive") => {
-    setCaregiver((prev) => (prev ? { ...prev, status } : prev));
-    toast.success(status === "active" ? "Caregiver enabled" : "Caregiver disabled");
-  };
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -113,7 +137,8 @@ const CaregiverDetail: React.FC = () => {
           <span className="text-sm text-muted-foreground">Account status</span>
           <Switch
             checked={caregiver.status === "active"}
-            onCheckedChange={(checked) => setStatus(checked ? "active" : "inactive")}
+            onCheckedChange={(checked) => updateStatus.mutate(checked)}
+            disabled={updateStatus.isPending}
           />
         </div>
       </div>

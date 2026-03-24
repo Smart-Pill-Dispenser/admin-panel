@@ -1,12 +1,15 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { Search, Calendar, Clock, Filter, Package, AlertTriangle, StopCircle, Play, HelpCircle, SkipForward, Wrench, Siren, QrCode, BarChart3, X, ChevronDown, Check } from "lucide-react";
-import { mockActivityLogs, mockDevices } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { adminApi } from "@/api/admin";
+import type { ApiDeviceLog } from "@/api/types";
+import LoadingCard from "@/components/LoadingCard";
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "All types" },
@@ -30,6 +33,16 @@ function parseLogDate(ts: string): Date {
   return new Date(datePart + "T00:00:00");
 }
 
+function normalizeLogs(items: ApiDeviceLog[], deviceId: string) {
+  return items.map((l) => ({
+    id: `${deviceId}:${l.timestamp}:${l.type}:${l.message}`,
+    deviceId,
+    type: (l.type || "unknown").toLowerCase(),
+    description: l.message || "",
+    timestamp: l.timestamp || "",
+  }));
+}
+
 const LogsAnalytics: React.FC = () => {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -41,9 +54,45 @@ const LogsAnalytics: React.FC = () => {
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [deviceDropdownOpen, setDeviceDropdownOpen] = useState(false);
 
+  const { data: devicesData } = useQuery({
+    queryKey: ["admin", "devices", "for-logs"],
+    queryFn: () => adminApi.getDevices({ limit: 500 }),
+  });
+
+  const {
+    data: deviceLogsData,
+    isLoading: logsLoading,
+  } = useQuery({
+    queryKey: ["admin", "deviceLogs", deviceFilter],
+    queryFn: () => adminApi.getDeviceLogs(deviceFilter, { limit: 200 }),
+    enabled: deviceFilter !== "all",
+  });
+
+  const { data: globalLogsData, isLoading: globalLogsLoading } = useQuery({
+    queryKey: ["admin", "logs", "global"],
+    queryFn: () => adminApi.getLogs({ limit: 200 }),
+    enabled: deviceFilter === "all",
+  });
+
+  const isLogsFetching = deviceFilter === "all" ? globalLogsLoading : logsLoading;
+
+  const logs = useMemo(() => {
+    if (deviceFilter === "all") {
+      const items = globalLogsData?.items ?? [];
+      return items.map((l) => ({
+        id: `${l.deviceId}:${l.timestamp}:${l.type}:${l.message}`,
+        deviceId: l.deviceId,
+        type: (l.type || "unknown").toLowerCase(),
+        description: l.message || "",
+        timestamp: l.timestamp || "",
+      }));
+    }
+    return normalizeLogs(deviceLogsData?.items ?? [], deviceFilter);
+  }, [deviceLogsData, deviceFilter, globalLogsData]);
+
   const filtered = useMemo(
     () =>
-      mockActivityLogs.filter((log) => {
+      logs.filter((log) => {
         const q = search.trim().toLowerCase();
         if (q && !log.description.toLowerCase().includes(q) && !log.deviceId.toLowerCase().includes(q) && !log.type.toLowerCase().includes(q) && !log.timestamp.includes(q)) return false;
         if (typeFilter !== "all" && log.type !== typeFilter) return false;
@@ -53,7 +102,7 @@ const LogsAnalytics: React.FC = () => {
         if (dateTo && logDate > new Date(dateTo + "T23:59:59")) return false;
         return true;
       }),
-    [search, typeFilter, deviceFilter, dateFrom, dateTo]
+    [logs, search, typeFilter, deviceFilter, dateFrom, dateTo]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -77,7 +126,7 @@ const LogsAnalytics: React.FC = () => {
     setDateTo("");
     setPage(1);
   }, []);
-  const isEmpty = mockActivityLogs.length === 0;
+  const isEmpty = logs.length === 0;
   const hasNoResults = filtered.length === 0 && hasActiveFilters;
 
   const logTypeIcons: Record<string, React.ReactNode> = {
@@ -210,7 +259,7 @@ const LogsAnalytics: React.FC = () => {
                         <Check className={cn("mr-2 h-4 w-4", deviceFilter === "all" ? "opacity-100" : "opacity-0")} />
                         All devices
                       </CommandItem>
-                      {mockDevices.map((d) => (
+                      {(devicesData?.items ?? []).map((d) => (
                         <CommandItem
                           key={d.id}
                           value={d.id}
@@ -249,10 +298,12 @@ const LogsAnalytics: React.FC = () => {
         )}
       </div>
 
-      {isEmpty && (
+      {isEmpty && isLogsFetching && <LoadingCard message="Loading logs…" />}
+
+      {isEmpty && !isLogsFetching && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No activity logs yet</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">No logs yet</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
             Device activity logs will appear here as events occur.
           </p>

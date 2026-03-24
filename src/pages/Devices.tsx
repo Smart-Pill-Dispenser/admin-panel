@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, Search, Filter, X } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
+import LoadingCard from "@/components/LoadingCard";
 import type { Device } from "@/data/mockData";
 import { Input } from "@/components/ui/input";
 import { adminApi } from "@/api/admin";
@@ -127,11 +128,7 @@ const Devices: React.FC = () => {
         )}
       </div>
 
-      {isLoading && (
-        <div className="rounded-xl border bg-card p-12 text-center">
-          <p className="text-sm text-muted-foreground">Loading devices…</p>
-        </div>
-      )}
+      {isLoading && <LoadingCard message="Loading devices…" />}
 
       {!isLoading && devices.length === 0 && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">

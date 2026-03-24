@@ -1,8 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { HelpCircle, Search, Filter, Calendar, X } from "lucide-react";
+import React, { useCallback, useMemo, useState } from "react";
+import { HelpCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { adminApi } from "@/api/admin";
+import type { ApiHelpRequest } from "@/api/types";
 import StatusBadge from "@/components/StatusBadge";
-import { mockHelpRequests } from "@/data/mockData";
-import type { HelpRequest } from "@/data/mockData";
+import LoadingCard from "@/components/LoadingCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,42 +22,52 @@ import { toast } from "sonner";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
-function parseHelpDate(ts: string): Date {
-  const [datePart] = ts.split(" ");
-  return new Date(datePart + "T00:00:00");
-}
-
 const HelpSupport: React.FC = () => {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [requests, setRequests] = useState(mockHelpRequests);
-  const [resolveDialog, setResolveDialog] = useState<{ open: boolean; req: HelpRequest | null }>({ open: false, req: null });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "helpRequests", { pageSize }],
+    queryFn: () => adminApi.getHelpRequests({ limit: 500 }),
+  });
+
+  const requests: ApiHelpRequest[] = useMemo(() => data?.items ?? [], [data]);
+
+  const [resolveDialog, setResolveDialog] = useState<{ open: boolean; req: ApiHelpRequest | null }>({ open: false, req: null });
   const [resolveIssue, setResolveIssue] = useState("");
   const [resolveReason, setResolveReason] = useState("");
 
-  const filtered = useMemo(
-    () =>
-      requests.filter((r) => {
-        const q = search.trim().toLowerCase();
-        if (q && !r.patientName.toLowerCase().includes(q) && !r.deviceId.toLowerCase().includes(q) && !r.id.toLowerCase().includes(q)) return false;
-        if (statusFilter !== "all" && r.status !== statusFilter) return false;
-        const logDate = parseHelpDate(r.timestamp);
-        if (dateFrom && logDate < new Date(dateFrom + "T00:00:00")) return false;
-        if (dateTo && logDate > new Date(dateTo + "T23:59:59")) return false;
-        return true;
-      }),
-    [requests, search, statusFilter, dateFrom, dateTo]
-  );
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, resolutionReason }: { id: string; resolutionReason?: string }) =>
+      adminApi.resolveHelpRequest(id, resolutionReason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "helpRequests"] });
+      toast.success("Help request resolved");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return requests.filter((r) => {
+      if (q) {
+        const hay = `${r.patientName ?? ""} ${r.deviceId ?? ""} ${r.id ?? ""} ${r.description ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (dateFrom && r.timestamp < new Date(dateFrom + "T00:00:00").toISOString()) return false;
+      if (dateTo && r.timestamp > new Date(dateTo + "T23:59:59").toISOString()) return false;
+      return true;
+    });
+  }, [requests, search, statusFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
-  useEffect(() => {
-    if (page > totalPages && totalPages >= 1) setPage(totalPages);
-  }, [page, totalPages]);
   const paginated = useMemo(
     () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
     [filtered, safePage, pageSize]
@@ -71,13 +83,11 @@ const HelpSupport: React.FC = () => {
     setDateTo("");
     setPage(1);
   }, []);
-  const isEmpty = requests.length === 0;
-  const hasNoResults = filtered.length === 0 && hasActiveFilters;
 
-  const openResolveDialog = (req: HelpRequest) => {
+  const openResolveDialog = (req: ApiHelpRequest) => {
     setResolveDialog({ open: true, req });
-    setResolveIssue(req.description);
-    setResolveReason("");
+    setResolveIssue(req.description ?? "");
+    setResolveReason(req.resolutionReason ?? "");
   };
 
   const closeResolveDialog = () => {
@@ -88,23 +98,8 @@ const HelpSupport: React.FC = () => {
 
   const handleResolveSubmit = () => {
     if (!resolveDialog.req) return;
-    const id = resolveDialog.req.id;
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status: "resolved" as const, resolutionReason: resolveReason.trim() || undefined }
-          : r
-      )
-    );
+    resolveMutation.mutate({ id: resolveDialog.req.id, resolutionReason: resolveReason.trim() || undefined });
     closeResolveDialog();
-    toast.success("Help request resolved", {
-      description: resolveReason.trim() ? "Resolution reason saved." : undefined,
-    });
-  };
-
-  const handleResolve = (id: string) => {
-    const req = requests.find((r) => r.id === id);
-    if (req) openResolveDialog(req);
   };
 
   return (
@@ -118,35 +113,18 @@ const HelpSupport: React.FC = () => {
       <div className="rounded-xl border bg-card p-4 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by request ID, device, or patient..."
+              placeholder="Search by request ID, device, patient, or description…"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="pl-9 pr-9"
+              className="pr-9"
               aria-label="Search help requests"
             />
-            {search.length > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
-                onClick={() => { setSearch(""); setPage(1); }}
-                aria-label="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
           </div>
           <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-sm text-muted-foreground whitespace-nowrap">Status:</span>
-            <Select
-              value={statusFilter}
-              onValueChange={(v) => { setStatusFilter(v); setPage(1); }}
-            >
-              <SelectTrigger className="w-[130px]">
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -158,7 +136,6 @@ const HelpSupport: React.FC = () => {
             </Select>
           </div>
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
             <Input type="date" className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} aria-label="From date" />
             <span className="text-muted-foreground text-sm shrink-0">–</span>
             <Input type="date" className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} aria-label="To date" />
@@ -169,35 +146,19 @@ const HelpSupport: React.FC = () => {
             </Button>
           )}
         </div>
-        {hasActiveFilters && (
-          <p className="text-xs text-muted-foreground mt-2">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
-          </p>
-        )}
       </div>
 
-      {isEmpty && (
+      {isLoading ? (
+        <LoadingCard message="Loading help requests…" />
+      ) : requests.length === 0 ? (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <HelpCircle className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No help requests yet</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            Help requests from devices will appear here when submitted.
+            Help requests will appear here when they are created by the system.
           </p>
         </div>
-      )}
-
-      {!isEmpty && hasNoResults && (
-        <div className="rounded-xl border bg-card p-12 text-center">
-          <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching requests</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
-          <Button variant="outline" className="mt-4" onClick={clearFilters}>
-            Clear filters
-          </Button>
-        </div>
-      )}
-
-      {!isEmpty && !hasNoResults && (
+      ) : (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <table className="w-full">
             <thead>
@@ -213,19 +174,14 @@ const HelpSupport: React.FC = () => {
             <tbody className="divide-y">
               {paginated.map((req) => (
                 <tr key={req.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <HelpCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="text-sm font-medium text-card-foreground">{req.id}</span>
-                    </div>
-                  </td>
+                  <td className="px-4 py-3 text-sm font-medium text-card-foreground">{req.id}</td>
                   <td className="px-4 py-3 text-sm text-card-foreground">{req.deviceId}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">{req.patientName}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">{req.timestamp}</td>
                   <td className="px-4 py-3"><StatusBadge status={req.status} /></td>
                   <td className="px-4 py-3 text-right">
                     {req.status !== "resolved" && (
-                      <Button variant="outline" size="sm" onClick={() => handleResolve(req.id)}>
+                      <Button variant="outline" size="sm" onClick={() => openResolveDialog(req)}>
                         Resolve
                       </Button>
                     )}
@@ -259,29 +215,6 @@ const HelpSupport: React.FC = () => {
             <p className="text-sm text-muted-foreground">
               Showing {startItem} to {endItem} of {filtered.length} results
             </p>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage <= 1}
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-muted-foreground px-1">
-                  Page {safePage} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage >= totalPages}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -318,7 +251,7 @@ const HelpSupport: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeResolveDialog}>Cancel</Button>
-            <Button onClick={handleResolveSubmit}>Resolve</Button>
+            <Button onClick={handleResolveSubmit} disabled={resolveMutation.isPending}>Resolve</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

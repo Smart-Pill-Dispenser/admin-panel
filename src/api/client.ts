@@ -7,6 +7,9 @@ export type OnUnauthorized = () => void;
 let getToken: GetToken = () => null;
 let onUnauthorized: OnUnauthorized = () => {};
 
+const USER_KEY = "admin_user";
+const REFRESH_KEY = "admin_refresh_token";
+
 export function setAuthTokenGetter(fn: GetToken) {
   getToken = fn;
 }
@@ -36,6 +39,35 @@ async function parseErrorResponse(res: Response): Promise<ApiErrorBody> {
   }
 }
 
+function getStoredEmail(): string | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { email?: unknown };
+    return typeof parsed.email === "string" && parsed.email.trim() ? parsed.email : null;
+  } catch {
+    return null;
+  }
+}
+
+async function tryRefreshSession(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  const email = getStoredEmail();
+  if (!refreshToken || !email) return null;
+
+  const url = getAdminApiUrl("admin/refresh");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, refreshToken }),
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { idToken?: string; accessToken?: string };
+  const token = data.idToken ?? data.accessToken ?? null;
+  if (token) localStorage.setItem("admin_access_token", token);
+  return token;
+}
+
 export async function adminFetch(
   path: string,
   options: RequestInit & { skipAuth?: boolean } = {}
@@ -43,6 +75,7 @@ export async function adminFetch(
   const { skipAuth, ...init } = options;
   const url = getAdminApiUrl(path);
   const headers = new Headers(init.headers);
+  const alreadyRetried = headers.get("X-Admin-Retry") === "1";
 
   if (!headers.has("Content-Type") && (init.body && typeof init.body === "string")) {
     headers.set("Content-Type", "application/json");
@@ -56,14 +89,20 @@ export async function adminFetch(
   const res = await fetch(url, { ...init, headers });
 
   if (!res.ok) {
+    if (res.status === 401 && !skipAuth && !alreadyRetried) {
+      const newToken = await tryRefreshSession();
+      if (newToken) {
+        const retryHeaders = new Headers(headers);
+        retryHeaders.set("Authorization", `Bearer ${newToken}`);
+        retryHeaders.set("X-Admin-Retry", "1");
+        const retryRes = await fetch(url, { ...init, headers: retryHeaders });
+        if (retryRes.ok) return retryRes;
+      }
+    }
+
     const body = await parseErrorResponse(res);
     if (res.status === 401) onUnauthorized();
-    throw new AdminApiError(
-      body.code || "ERROR",
-      body.message || res.statusText,
-      res.status,
-      body.fieldErrors
-    );
+    throw new AdminApiError(body.code || "ERROR", body.message || res.statusText, res.status, body.fieldErrors);
   }
 
   return res;
