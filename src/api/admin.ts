@@ -1,4 +1,4 @@
-import { adminGet, adminPost, adminPatch } from "./client";
+import { adminFetch, adminGet, adminPost, adminPatch } from "./client";
 import type {
   LoginResponse,
   RefreshResponse,
@@ -42,6 +42,30 @@ export const adminApi = {
     if (params?.limit != null) q.limit = params.limit;
     if (params?.cursor != null) q.cursor = params.cursor;
     return adminGet<DevicesListResponse>("admin/devices", q);
+  },
+
+  removeDevice(deviceId: string) {
+    return adminFetch(`admin/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" }).then(async (res) => {
+      const text = await res.text();
+      if (!text) return { deleted: true };
+      return JSON.parse(text) as { deleted: boolean };
+    });
+  },
+
+  /** POST /admin/devices/{id}/commands/stop — requires patient assigned (enforced server-side). */
+  stopDispensing(deviceId: string) {
+    return adminPost<{ item: unknown }>(
+      `admin/devices/${encodeURIComponent(deviceId)}/commands/stop`,
+      {}
+    );
+  },
+
+  /** POST /admin/devices/{id}/commands/resume — requires patient assigned (enforced server-side). */
+  resumeDispensing(deviceId: string) {
+    return adminPost<{ item: unknown }>(
+      `admin/devices/${encodeURIComponent(deviceId)}/commands/resume`,
+      {}
+    );
   },
 
   getDeviceLogs(
@@ -104,8 +128,8 @@ export const adminApi = {
     return adminGet<AlertsSummaryResponse>("admin/alerts/summary");
   },
 
-  bulkUploadSerials(items: SerialBulkItem[]) {
-    return adminPost<SerialBulkResponse>("admin/serials/bulk", { items });
+  bulkUploadSerials(items: SerialBulkItem[], organizationId?: string) {
+    return adminPost<SerialBulkResponse>("admin/serials/bulk", { items, ...(organizationId ? { organizationId } : {}) });
   },
 
   getSystemHealth() {

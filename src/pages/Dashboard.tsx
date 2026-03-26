@@ -16,17 +16,15 @@ function getDeviceStatusChartData(deviceStatus: {
   paused?: number;
   stopped?: number;
 } | undefined) {
-  if (!deviceStatus) return [];
-  const online = deviceStatus.online ?? 0;
-  const offline = deviceStatus.offline ?? 0;
-  const paused = deviceStatus.paused ?? 0;
-  const stopped = deviceStatus.stopped ?? 0;
-  const total = online + offline + paused + stopped;
-  if (total === 0) return [];
+  const online = deviceStatus?.online ?? 0;
+  const offline = deviceStatus?.offline ?? 0;
+  const paused = deviceStatus?.paused ?? 0;
+  const stopped = deviceStatus?.stopped ?? 0;
+  // Always return all buckets so the chart renders even at zero
   return [
-    ...(online > 0 ? [{ name: "Online", value: online, color: "hsl(160, 84%, 39%)" }] : []),
-    ...(offline > 0 ? [{ name: "Offline", value: offline, color: "hsl(var(--muted-foreground))" }] : []),
-    ...(paused + stopped > 0 ? [{ name: "Paused / Stopped", value: paused + stopped, color: "hsl(38, 92%, 50%)" }] : []),
+    { name: "Online", value: online, color: "hsl(160, 84%, 39%)" },
+    { name: "Offline", value: offline, color: "hsl(var(--muted-foreground))" },
+    { name: "Paused/Stopped", value: paused + stopped, color: "hsl(38, 92%, 50%)" },
   ];
 }
 
@@ -36,11 +34,13 @@ const Dashboard: React.FC = () => {
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
     queryKey: ["admin", "dashboard"],
     queryFn: () => adminApi.getDashboard(),
+    staleTime: 0,
   });
 
   const { data: devicesData, isLoading: devicesLoading } = useQuery({
     queryKey: ["admin", "devices"],
     queryFn: () => adminApi.getDevices({ limit: 100 }),
+    staleTime: 0,
   });
 
   const isDashboardLoading = dashboardLoading || devicesLoading;
@@ -122,7 +122,7 @@ const Dashboard: React.FC = () => {
                 <div className="h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40 animate-pulse mb-4" />
                 <div className="h-[250px] w-full rounded bg-muted/30 dark:bg-muted/20 animate-pulse" />
               </div>
-            ) : deviceStatusChartData.length > 0 ? (
+            ) : (
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
                   <Pie
@@ -149,10 +149,6 @@ const Dashboard: React.FC = () => {
                   />
                 </PieChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="flex h-[250px] items-center justify-center text-muted-foreground text-sm">
-                No devices yet
-              </div>
             )}
           </div>
         </div>

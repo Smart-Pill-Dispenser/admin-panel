@@ -6,6 +6,7 @@ import type { ApiHelpRequest } from "@/api/types";
 import StatusBadge from "@/components/StatusBadge";
 import LoadingCard from "@/components/LoadingCard";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -136,9 +137,25 @@ const HelpSupport: React.FC = () => {
             </Select>
           </div>
           <div className="flex items-center gap-2">
-            <Input type="date" className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} aria-label="From date" />
+            <DateInput
+              className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setPage(1);
+              }}
+              aria-label="From date"
+            />
             <span className="text-muted-foreground text-sm shrink-0">–</span>
-            <Input type="date" className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} aria-label="To date" />
+            <DateInput
+              className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setPage(1);
+              }}
+              aria-label="To date"
+            />
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>

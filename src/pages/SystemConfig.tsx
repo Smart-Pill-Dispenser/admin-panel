@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Settings2,
   ChevronDown,
@@ -14,19 +14,13 @@ import {
   HelpCircle,
   Search,
   X,
-  Activity,
-  Upload,
-  Plus,
-  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { DateInput } from "@/components/ui/date-input";
 import { cn } from "@/lib/utils";
 import { adminApi } from "@/api/admin";
-import type { SerialBulkItem } from "@/api/types";
-import { toast } from "sonner";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -43,50 +37,11 @@ const statusIcon: Record<string, React.ReactNode> = {
   unknown: <HelpCircle className="h-4 w-4 text-muted-foreground" />,
 };
 
-const defaultSerialRow = (): SerialBulkItem => ({
-  serial: "",
-  batchId: "",
-  productType: "DEVICE",
-  validFrom: new Date().toISOString().slice(0, 10),
-  validTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-});
-
 const SystemConfig: React.FC = () => {
-  const { data: healthData, isLoading: healthLoading } = useQuery({
-    queryKey: ["admin", "system", "health"],
-    queryFn: () => adminApi.getSystemHealth(),
-  });
-
   const { data: devicesData } = useQuery({
     queryKey: ["admin", "devices", "for-system-config"],
     queryFn: () => adminApi.getDevices({ limit: 500 }),
   });
-
-  const [serialRows, setSerialRows] = useState<SerialBulkItem[]>([defaultSerialRow()]);
-  const [bulkResult, setBulkResult] = useState<{ uploaded: number; rejected: number; fieldErrors?: Record<string, string> } | null>(null);
-  const bulkUpload = useMutation({
-    mutationFn: (items: SerialBulkItem[]) => adminApi.bulkUploadSerials(items),
-    onSuccess: (data) => {
-      setBulkResult({ uploaded: data.uploaded, rejected: data.rejected, fieldErrors: data.fieldErrors });
-      if (data.uploaded > 0 || data.rejected > 0) {
-        toast.success(`Uploaded: ${data.uploaded}, Rejected: ${data.rejected}`);
-      }
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const addSerialRow = () => setSerialRows((r) => [...r, defaultSerialRow()]);
-  const removeSerialRow = (i: number) => setSerialRows((r) => r.filter((_, idx) => idx !== i));
-  const updateSerialRow = (i: number, patch: Partial<SerialBulkItem>) =>
-    setSerialRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
-  const handleBulkUpload = () => {
-    const items = serialRows.filter((row) => row.serial.trim() && row.batchId.trim());
-    if (items.length === 0) {
-      toast.error("Add at least one row with serial and batch ID");
-      return;
-    }
-    bulkUpload.mutate(items);
-  };
 
   const [search, setSearch] = useState("");
   const [deviceFilter, setDeviceFilter] = useState<string>("all");
@@ -169,152 +124,10 @@ const SystemConfig: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-foreground">System Config (Engineering)</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              System health, serial upload, and full technical logs.
+              Full technical logs per device.
             </p>
           </div>
         </div>
-      </div>
-
-      {/* System Health */}
-      <div className="rounded-xl border bg-card shadow-card p-5">
-        <h2 className="text-lg font-semibold text-card-foreground mb-4 flex items-center gap-2">
-          <Activity className="h-5 w-5 text-muted-foreground" />
-          System Health
-        </h2>
-        {healthLoading ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 animate-pulse">
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <div className="h-3 w-10 rounded bg-muted/60 dark:bg-muted/40" />
-              <div className="mt-2 h-4 w-3/5 rounded bg-muted/60 dark:bg-muted/40" />
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <div className="h-3 w-16 rounded bg-muted/60 dark:bg-muted/40" />
-              <div className="mt-2 h-4 w-4/5 rounded bg-muted/60 dark:bg-muted/40" />
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <div className="h-3 w-16 rounded bg-muted/60 dark:bg-muted/40" />
-              <div className="mt-2 h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40" />
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <div className="h-3 w-20 rounded bg-muted/60 dark:bg-muted/40" />
-              <div className="mt-2 h-4 w-1/2 rounded bg-muted/60 dark:bg-muted/40" />
-            </div>
-          </div>
-        ) : healthData ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">API</p>
-              <p className="mt-1 font-medium text-card-foreground">{healthData.api}</p>
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Backend</p>
-              <p className="mt-1 font-medium text-card-foreground">{healthData.backend}</p>
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Devices</p>
-              <p className="mt-1 font-medium text-card-foreground">
-                Online: {healthData.devices?.online ?? 0}, Offline: {healthData.devices?.offline ?? 0}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Device sync</p>
-              <p className="mt-1 font-medium text-card-foreground">{healthData.deviceSync ?? "—"}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Unable to load health.</p>
-        )}
-      </div>
-
-      {/* Serial bulk upload */}
-      <div className="rounded-xl border bg-card shadow-card p-5">
-        <h2 className="text-lg font-semibold text-card-foreground mb-4 flex items-center gap-2">
-          <Upload className="h-5 w-5 text-muted-foreground" />
-          Bulk upload serials
-        </h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Add serial numbers and batch IDs; optional product type and validity dates.
-        </p>
-        <div className="space-y-3">
-          {serialRows.map((row, i) => (
-            <div key={i} className="flex flex-wrap items-end gap-2 rounded-lg border p-3 bg-muted/20">
-              <div className="grid gap-1">
-                <Label className="text-xs">Serial</Label>
-                <Input
-                  placeholder="SN12345"
-                  value={row.serial}
-                  onChange={(e) => updateSerialRow(i, { serial: e.target.value })}
-                  className="w-32"
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label className="text-xs">Batch ID</Label>
-                <Input
-                  placeholder="batch-001"
-                  value={row.batchId}
-                  onChange={(e) => updateSerialRow(i, { batchId: e.target.value })}
-                  className="w-36"
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label className="text-xs">Product type</Label>
-                <Select
-                  value={row.productType ?? "DEVICE"}
-                  onValueChange={(v) => updateSerialRow(i, { productType: v })}
-                >
-                  <SelectTrigger className="w-28">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="DEVICE">DEVICE</SelectItem>
-                    <SelectItem value="POUCH">POUCH</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-1">
-                <Label className="text-xs">Valid from</Label>
-                <Input
-                  type="date"
-                  value={row.validFrom ?? ""}
-                  onChange={(e) => updateSerialRow(i, { validFrom: e.target.value })}
-                  className="w-36"
-                />
-              </div>
-              <div className="grid gap-1">
-                <Label className="text-xs">Valid to</Label>
-                <Input
-                  type="date"
-                  value={row.validTo ?? ""}
-                  onChange={(e) => updateSerialRow(i, { validTo: e.target.value })}
-                  className="w-36"
-                />
-              </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => removeSerialRow(i)} aria-label="Remove row">
-                <Trash2 className="h-4 w-4 text-muted-foreground" />
-              </Button>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={addSerialRow} className="gap-1">
-            <Plus className="h-4 w-4" /> Add row
-          </Button>
-          <Button size="sm" onClick={handleBulkUpload} disabled={bulkUpload.isPending} className="gap-1">
-            <Upload className="h-4 w-4" /> Upload
-          </Button>
-        </div>
-        {bulkResult && (
-          <div className="mt-4 rounded-lg border bg-muted/30 p-3 text-sm">
-            <p className="font-medium text-card-foreground">Result: uploaded {bulkResult.uploaded}, rejected {bulkResult.rejected}</p>
-            {bulkResult.fieldErrors && Object.keys(bulkResult.fieldErrors).length > 0 && (
-              <ul className="mt-2 list-inside list-disc text-destructive">
-                {Object.entries(bulkResult.fieldErrors).map(([key, msg]) => (
-                  <li key={key}>{key}: {msg}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Engineering logs section */}
@@ -367,9 +180,25 @@ const SystemConfig: React.FC = () => {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-            <Input type="date" className="min-w-[152px] w-[152px] pr-9 shrink-0" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} aria-label="From date" />
+            <DateInput
+              className="min-w-[152px] w-[152px] pr-9 shrink-0"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setPage(1);
+              }}
+              aria-label="From date"
+            />
             <span className="text-muted-foreground shrink-0">–</span>
-            <Input type="date" className="min-w-[152px] w-[152px] pr-9 shrink-0" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} aria-label="To date" />
+            <DateInput
+              className="min-w-[152px] w-[152px] pr-9 shrink-0"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setPage(1);
+              }}
+              aria-label="To date"
+            />
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>

@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+
+// Feature flag — set to true to re-enable the Add Pharmacy User button in the UI.
+const SHOW_ADD_PHARMACY_BUTTON = false;
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, Search, Eye, Filter, X } from "lucide-react";
@@ -166,9 +169,11 @@ const PharmacyList: React.FC = () => {
             View details and enable or disable pharmacy access.
           </p>
         </div>
-        <div>
-          <Button onClick={openCreateDialog}>Add pharmacy user</Button>
-        </div>
+        {SHOW_ADD_PHARMACY_BUTTON && (
+          <div>
+            <Button onClick={openCreateDialog}>Add pharmacy user</Button>
+          </div>
+        )}
       </div>
 
       {/* Search and filters toolbar */}

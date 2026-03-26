@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import AppLayout from "@/components/AppLayout";
@@ -21,6 +22,50 @@ import LogsAnalytics from "@/pages/LogsAnalytics";
 import SystemConfig from "@/pages/SystemConfig";
 import NotFound from "@/pages/NotFound";
 
+const LAST_ROUTE_KEY = "admin_last_route";
+const PUBLIC_PATHS = ["/login", "/reset-password"];
+
+function RouteRestorer() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  // Save current protected route synchronously during render.
+  // This is important because the initial protected-route redirect to `/login`
+  // can happen before `useEffect` runs on refresh.
+  try {
+    if (!PUBLIC_PATHS.includes(location.pathname)) {
+      // Important: don't overwrite an already-saved non-root route when the
+      // current pathname is `/`, otherwise refresh will "lose" the original
+      // deep link and fall back to the dashboard.
+      const existing = sessionStorage.getItem(LAST_ROUTE_KEY);
+      const next = location.pathname + location.search;
+
+      if (location.pathname === "/") {
+        if (existing === null || existing === "/") {
+          sessionStorage.setItem(LAST_ROUTE_KEY, next);
+        }
+      } else {
+        sessionStorage.setItem(LAST_ROUTE_KEY, next);
+      }
+    }
+  } catch {
+    // Non-fatal (storage might be blocked)
+  }
+
+  // On first authenticated mount, restore saved route
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const saved = sessionStorage.getItem(LAST_ROUTE_KEY);
+    if (saved && saved !== "/" && location.pathname === "/") {
+      navigate(saved, { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
+  return null;
+}
+
 const queryClient = new QueryClient();
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -36,6 +81,8 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const AppRoutes = () => (
+  <>
+  <RouteRestorer />
   <Routes>
     <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
     <Route path="/reset-password" element={<ResetPassword />} />
@@ -55,6 +102,7 @@ const AppRoutes = () => (
     </Route>
     <Route path="*" element={<NotFound />} />
   </Routes>
+  </>
 );
 
 const App = () => (

@@ -32,7 +32,9 @@ export interface DashboardResponse {
 /** Device item from GET /admin/devices */
 export interface ApiDevice {
   id: string;
+  serialNumber?: string;
   name?: string;
+  patientId?: string;
   patientName?: string;
   status: string;
   state?: string;
@@ -47,6 +49,7 @@ export interface ApiDevice {
   lastActionBy?: string;
   lastActionAt?: string;
   lastActionReason?: string;
+  pharmacyName?: string;
 }
 
 export interface DevicesListResponse {
@@ -120,10 +123,11 @@ export interface AlertsSummaryResponse {
   unacknowledgedAlerts: number;
 }
 
-/** POST /admin/serials/bulk request item */
+/** POST /admin/serials/bulk request item — only `serial` or `deviceId` required; `batchId` optional (server defaults). */
 export interface SerialBulkItem {
-  serial: string;
-  batchId: string;
+  serial?: string;
+  deviceId?: string;
+  batchId?: string;
   productType?: string;
   validFrom?: string;
   validTo?: string;
