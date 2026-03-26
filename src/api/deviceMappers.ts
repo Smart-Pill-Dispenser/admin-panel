@@ -18,10 +18,12 @@ export function mapApiDeviceToDevice(api: ApiDevice): Device {
   const td = api.totalDoses ?? 0;
   // Legacy admin placeholder stored totalDoses=28 with 0 remaining; display as 0/0 (matches backend normalize).
   const legacyPlaceholder = td === 28 && dr === 0;
+  const pid = api.patientId != null && String(api.patientId).trim() ? String(api.patientId).trim() : null;
   return {
     id: api.id,
     serialNumber: api.serialNumber ?? api.id,
     patientName: api.patientName ?? api.name ?? "—",
+    patientId: pid,
     status,
     remainingPouches: legacyPlaceholder ? 0 : dr,
     totalPouches: legacyPlaceholder ? 0 : td,

@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { cn } from "@/lib/utils";
 import { adminApi } from "@/api/admin";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -43,6 +44,12 @@ const SystemConfig: React.FC = () => {
     queryFn: () => adminApi.getDevices({ limit: 500 }),
   });
 
+  const devicesNewestFirst = useMemo(
+    () =>
+      sortRecordsNewestFirst([...(devicesData?.items ?? [])] as Record<string, unknown>[], ["createdAt", "lastActionAt"]),
+    [devicesData]
+  );
+
   const [search, setSearch] = useState("");
   const [deviceFilter, setDeviceFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -59,13 +66,14 @@ const SystemConfig: React.FC = () => {
 
   const engineeringLogs = useMemo(() => {
     if (deviceFilter === "all") return [];
-    return (deviceLogsData?.items ?? []).map((l) => ({
+    const rows = (deviceLogsData?.items ?? []).map((l) => ({
       id: `${deviceFilter}:${l.timestamp}:${l.type}:${l.message}`,
       timestamp: l.timestamp,
       deviceId: l.deviceId || deviceFilter,
       eventType: l.type,
       reason: l.message,
     }));
+    return sortRecordsNewestFirst(rows as Record<string, unknown>[], ["timestamp"]) as typeof rows;
   }, [deviceLogsData, deviceFilter]);
 
   const filtered = useMemo(
@@ -172,8 +180,10 @@ const SystemConfig: React.FC = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All devices</SelectItem>
-                {(devicesData?.items ?? []).map((d) => (
-                  <SelectItem key={d.id} value={d.id}>{d.id}</SelectItem>
+                {devicesNewestFirst.map((d) => (
+                  <SelectItem key={String(d.id)} value={String(d.id)}>
+                    {String(d.id)}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

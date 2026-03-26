@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { adminApi } from "@/api/admin";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 import type { ApiDeviceLog } from "@/api/types";
 import LoadingCard from "@/components/LoadingCard";
 
@@ -60,6 +61,12 @@ const LogsAnalytics: React.FC = () => {
     queryFn: () => adminApi.getDevices({ limit: 500 }),
   });
 
+  const devicesNewestFirst = useMemo(
+    () =>
+      sortRecordsNewestFirst([...(devicesData?.items ?? [])] as Record<string, unknown>[], ["createdAt", "lastActionAt"]),
+    [devicesData]
+  );
+
   const {
     data: deviceLogsData,
     isLoading: logsLoading,
@@ -80,15 +87,17 @@ const LogsAnalytics: React.FC = () => {
   const logs = useMemo(() => {
     if (deviceFilter === "all") {
       const items = globalLogsData?.items ?? [];
-      return items.map((l) => ({
+      const rows = items.map((l) => ({
         id: `${l.deviceId}:${l.timestamp}:${l.type}:${l.message}`,
         deviceId: l.deviceId,
         type: (l.type || "unknown").toLowerCase(),
         description: l.message || "",
         timestamp: l.timestamp || "",
       }));
+      return sortRecordsNewestFirst(rows as Record<string, unknown>[], ["timestamp"]) as typeof rows;
     }
-    return normalizeLogs(deviceLogsData?.items ?? [], deviceFilter);
+    const rows = normalizeLogs(deviceLogsData?.items ?? [], deviceFilter);
+    return sortRecordsNewestFirst(rows as Record<string, unknown>[], ["timestamp"]) as typeof rows;
   }, [deviceLogsData, deviceFilter, globalLogsData]);
 
   const filtered = useMemo(
@@ -260,7 +269,7 @@ const LogsAnalytics: React.FC = () => {
                         <Check className={cn("mr-2 h-4 w-4", deviceFilter === "all" ? "opacity-100" : "opacity-0")} />
                         All devices
                       </CommandItem>
-                      {(devicesData?.items ?? []).map((d) => (
+                      {devicesNewestFirst.map((d) => (
                         <CommandItem
                           key={d.id}
                           value={d.id}

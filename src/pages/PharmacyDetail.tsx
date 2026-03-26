@@ -1,11 +1,9 @@
 import React, { useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Building2, Mail } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
 import { adminApi } from "@/api/admin";
 import LoadingCard from "@/components/LoadingCard";
 
@@ -13,7 +11,6 @@ const PharmacyDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const queryClient = useQueryClient();
   const pharmacyFromState = (location.state as any)?.pharmacy as
     | { id: string; name: string; email: string; status: "active" | "inactive" }
     | undefined;
@@ -30,15 +27,6 @@ const PharmacyDetail: React.FC = () => {
     if (!api) return undefined;
     return { id: api.id, name: api.name, email: api.email, status: api.enabled ? "active" : "inactive" as const };
   }, [id, pharmaciesData, pharmacyFromState]);
-
-  const updateStatus = useMutation({
-    mutationFn: (enabled: boolean) => adminApi.updatePharmacyStatus(id!, enabled),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "pharmacies"] });
-      toast.success("Pharmacy status updated");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   if (!pharmacy) {
     if (isLoading) {
@@ -96,23 +84,6 @@ const PharmacyDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Access */}
-      <div className="rounded-xl border bg-card shadow-card">
-        <div className="border-b p-4">
-          <h2 className="font-semibold text-card-foreground">Access</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Enable or disable this pharmacy&apos;s access to the system.
-          </p>
-        </div>
-        <div className="p-4 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Account status</span>
-          <Switch
-            checked={pharmacy.status === "active"}
-            onCheckedChange={(checked) => updateStatus.mutate(checked)}
-            disabled={updateStatus.isPending}
-          />
-        </div>
-      </div>
     </div>
   );
 };

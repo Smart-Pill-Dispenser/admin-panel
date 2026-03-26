@@ -1,11 +1,9 @@
 import React, { useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Users, Mail, Phone, Monitor } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { toast } from "sonner";
 import { adminApi } from "@/api/admin";
 import LoadingCard from "@/components/LoadingCard";
 
@@ -13,7 +11,6 @@ const CaregiverDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const queryClient = useQueryClient();
   const caregiverFromState = (location.state as any)?.caregiver as
     | { id: string; name: string; email: string; phone?: string; linkedDevices: string[]; status: "active" | "inactive" }
     | undefined;
@@ -32,20 +29,12 @@ const CaregiverDetail: React.FC = () => {
       id: api.id,
       name: api.name,
       email: api.email,
-      phone: "—",
+      phone:
+        typeof api.phone === "string" && api.phone.trim() ? api.phone.trim() : "—",
       linkedDevices: api.linkedDeviceIds ?? [],
       status: api.isActive ? "active" : "inactive" as const,
     };
   }, [id, caregiverFromState, caregiversData]);
-
-  const updateStatus = useMutation({
-    mutationFn: (isActive: boolean) => adminApi.updateCaregiverStatus(id!, isActive),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "caregivers"] });
-      toast.success("Caregiver status updated");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   if (!caregiver) {
     if (isLoading) {
@@ -128,23 +117,6 @@ const CaregiverDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Access */}
-      <div className="rounded-xl border bg-card shadow-card">
-        <div className="border-b p-4">
-          <h2 className="font-semibold text-card-foreground">Access</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Enable or disable this caregiver&apos;s access to the system.
-          </p>
-        </div>
-        <div className="p-4 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Account status</span>
-          <Switch
-            checked={caregiver.status === "active"}
-            onCheckedChange={(checked) => updateStatus.mutate(checked)}
-            disabled={updateStatus.isPending}
-          />
-        </div>
-      </div>
     </div>
   );
 };

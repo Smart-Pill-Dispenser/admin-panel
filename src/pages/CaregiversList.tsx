@@ -1,11 +1,19 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, Search, Eye, Filter, X } from "lucide-react";
+import { Users, Search, Filter, X, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -21,19 +29,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import StatusBadge from "@/components/StatusBadge";
 import LoadingCard from "@/components/LoadingCard";
 import type { Caregiver } from "@/data/mockData";
 import { adminApi } from "@/api/admin";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
-function mapApiCaregiverToCaregiver(api: { id: string; name: string; email: string; isActive: boolean; linkedDeviceIds?: string[] }): Caregiver {
+function mapApiCaregiverToCaregiver(api: {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  isActive: boolean;
+  linkedDeviceIds?: string[];
+}): Caregiver {
+  const phone =
+    typeof api.phone === "string" && api.phone.trim() ? api.phone.trim() : "—";
   return {
     id: api.id,
     name: api.name,
     email: api.email,
-    phone: "—",
+    phone,
     linkedDevices: api.linkedDeviceIds ?? [],
     status: api.isActive ? "active" : "inactive",
   };
@@ -42,22 +69,63 @@ function mapApiCaregiverToCaregiver(api: { id: string; name: string; email: stri
 const CaregiversList: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [removeTarget, setRemoveTarget] = useState<Caregiver | null>(null);
+  const [editTarget, setEditTarget] = useState<Caregiver | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
   const { data: caregiversData, isLoading } = useQuery({
     queryKey: ["admin", "caregivers"],
     queryFn: () => adminApi.getCaregivers({ limit: 500 }),
   });
 
+  useEffect(() => {
+    if (editTarget) {
+      setEditName(editTarget.name);
+      setEditEmail(editTarget.email);
+      setEditPhone(editTarget.phone === "—" ? "" : editTarget.phone);
+    }
+  }, [editTarget]);
+
   const caregivers: Caregiver[] = useMemo(
-    () => (caregiversData?.items ?? []).map(mapApiCaregiverToCaregiver),
+    () =>
+      sortRecordsNewestFirst([...(caregiversData?.items ?? [])] as Record<string, unknown>[], ["createdAt", "updatedAt"]).map(
+        (row) =>
+          mapApiCaregiverToCaregiver(
+            row as {
+              id: string;
+              name: string;
+              email: string;
+              phone?: string;
+              isActive: boolean;
+              linkedDeviceIds?: string[];
+            }
+          )
+      ),
     [caregiversData]
   );
 
-  const updateStatus = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      adminApi.updateCaregiverStatus(id, isActive),
+  const saveCaregiverEdit = useMutation({
+    mutationFn: (p: { id: string; name: string; email: string; phone: string }) =>
+      adminApi.updateCaregiver(p.id, {
+        name: p.name.trim(),
+        email: p.email.trim(),
+        ...(p.phone.trim() ? { phone: p.phone.trim() } : { phone: "" }),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "caregivers"] });
-      toast.success("Caregiver status updated");
+      toast.success("Caregiver updated");
+      setEditTarget(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteCaregiver = useMutation({
+    mutationFn: (id: string) => adminApi.deleteCaregiver(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "caregivers"] });
+      toast.success("Caregiver removed");
+      setRemoveTarget(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -93,13 +161,6 @@ const CaregiversList: React.FC = () => {
     [filtered, safePage, pageSize]
   );
 
-  const setCaregiverStatus = useCallback(
-    (id: string, status: "active" | "inactive") => {
-      updateStatus.mutate({ id, isActive: status === "active" });
-    },
-    [updateStatus]
-  );
-
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(safePage * pageSize, filtered.length);
 
@@ -118,7 +179,7 @@ const CaregiversList: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Caregivers</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          View details and enable or disable caregiver access.
+          Search, filter by status, edit details, or remove a caregiver.
         </p>
       </div>
 
@@ -251,29 +312,130 @@ const CaregiversList: React.FC = () => {
                     <StatusBadge status={caregiver.status} />
                   </TableCell>
                   <TableCell className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-0.5">
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => navigate(`/user-management/caregivers/${caregiver.id}`, { state: { caregiver } })}
-                        aria-label="View details"
+                        className="h-8 w-8 text-primary hover:text-primary"
+                        title="Edit caregiver"
+                        aria-label="Edit caregiver"
+                        onClick={() => setEditTarget(caregiver)}
                       >
-                        <Eye className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                      <Switch
-                        checked={caregiver.status === "active"}
-                        disabled={updateStatus.isPending}
-                        onCheckedChange={(checked) =>
-                          setCaregiverStatus(caregiver.id, checked ? "active" : "inactive")
-                        }
-                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        title="Remove caregiver"
+                        aria-label="Remove caregiver"
+                        disabled={deleteCaregiver.isPending}
+                        onClick={() => setRemoveTarget(caregiver)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+
+          <AlertDialog open={removeTarget != null} onOpenChange={(o) => !o && !deleteCaregiver.isPending && setRemoveTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove caregiver?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {removeTarget ? (
+                    <>
+                      Permanently delete <span className="font-medium text-foreground">{removeTarget.name}</span> (
+                      {removeTarget.id}). This cannot be undone.
+                    </>
+                  ) : null}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteCaregiver.isPending}>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={deleteCaregiver.isPending || !removeTarget}
+                  onClick={() => removeTarget && deleteCaregiver.mutate(removeTarget.id)}
+                >
+                  {deleteCaregiver.isPending ? "Removing…" : "Remove"}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <Dialog
+            open={editTarget != null}
+            onOpenChange={(open) => {
+              if (!open && !saveCaregiverEdit.isPending) setEditTarget(null);
+            }}
+          >
+            <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+              <DialogHeader>
+                <DialogTitle>Edit caregiver</DialogTitle>
+                <DialogDescription>Update name, email, and phone on file.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-caregiver-name">Name</Label>
+                  <Input
+                    id="edit-caregiver-name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    disabled={saveCaregiverEdit.isPending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-caregiver-email">Email</Label>
+                  <Input
+                    id="edit-caregiver-email"
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    disabled={saveCaregiverEdit.isPending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-caregiver-phone">Phone</Label>
+                  <Input
+                    id="edit-caregiver-phone"
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    disabled={saveCaregiverEdit.isPending}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditTarget(null)} disabled={saveCaregiverEdit.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!editTarget) return;
+                    if (!editName.trim() || !editEmail.trim()) {
+                      toast.error("Name and email are required");
+                      return;
+                    }
+                    saveCaregiverEdit.mutate({
+                      id: editTarget.id,
+                      name: editName,
+                      email: editEmail,
+                      phone: editPhone,
+                    });
+                  }}
+                  disabled={saveCaregiverEdit.isPending || !editName.trim() || !editEmail.trim()}
+                >
+                  {saveCaregiverEdit.isPending ? "Saving…" : "Save"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">

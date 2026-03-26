@@ -131,6 +131,13 @@ export async function adminPost<T>(path: string, body?: unknown, skipAuth = fals
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/** DELETE. Throws AdminApiError on non-2xx. */
+export async function adminDelete<T>(path: string): Promise<T> {
+  const res = await adminFetch(path, { method: "DELETE" });
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 /** PATCH JSON. Throws AdminApiError on non-2xx. */
 export async function adminPatch<T>(path: string, body: unknown): Promise<T> {
   const res = await adminFetch(path, {

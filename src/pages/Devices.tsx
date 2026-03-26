@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Filter, Monitor, Plus, Search, Trash2, Upload, X } from "lucide-react";
@@ -19,12 +19,161 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { SerialBulkItem } from "@/api/types";
+import type { ApiDevice, SerialBulkItem } from "@/api/types";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 import * as XLSX from "xlsx";
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 /** Bulk upload accepts Excel workbooks only (file picker + name check). */
 const EXCEL_FILENAME_RE = /\.(xlsx|xls)$/i;
+
+/** Excel headers often use NBSP (\\u00A0) or BOM/ZWSP so simple toLowerCase() misses "device id". */
+function normalizeExcelHeaderKey(k: string): string {
+  return k
+    .replace(/\uFEFF/g, "")
+    .replace(/[\u200B-\u200D]/g, "")
+    .replace(/\u00a0/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+const DEVICE_ID_HEADER_KEYS = new Set([
+  "device id",
+  "deviceid",
+  "device_id",
+  "dev id",
+  "dev_id",
+  "serial",
+  "serialnumber",
+  "serial_number",
+  "serial no",
+  "sn",
+]);
+
+function normalizeCellValue(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number") return String(v);
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).trim();
+}
+
+function rowToNormalizedKeyMap(row: Record<string, unknown>): Record<string, unknown> {
+  const m: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    m[normalizeExcelHeaderKey(k)] = v;
+  }
+  return m;
+}
+
+function extractSerialFromKeyMap(m: Record<string, unknown>): string {
+  return (
+    normalizeCellValue(m["device id"]) ||
+    normalizeCellValue(m["deviceid"]) ||
+    normalizeCellValue(m["device_id"]) ||
+    normalizeCellValue(m["dev id"]) ||
+    normalizeCellValue(m["dev_id"]) ||
+    normalizeCellValue(m["serial"]) ||
+    normalizeCellValue(m["serialnumber"]) ||
+    normalizeCellValue(m["serial_number"]) ||
+    normalizeCellValue(m["serial no"]) ||
+    normalizeCellValue(m["sn"])
+  );
+}
+
+type SerialBulkRowShape = {
+  serial: string;
+  batchId: string;
+  productType: string;
+  validFrom: string;
+  validTo: string;
+};
+
+function parseBulkSheetObjectRows(rows: Record<string, unknown>[]): SerialBulkRowShape[] {
+  const parsed: SerialBulkRowShape[] = [];
+  for (const row of rows) {
+    const m = rowToNormalizedKeyMap(row);
+    const serial = extractSerialFromKeyMap(m);
+    const batchId =
+      normalizeCellValue(m["batchid"]) ||
+      normalizeCellValue(m["batch_id"]) ||
+      normalizeCellValue(m["batch"]) ||
+      normalizeCellValue(m["batch id"]);
+    const productType =
+      normalizeCellValue(m["producttype"]) ||
+      normalizeCellValue(m["product_type"]) ||
+      normalizeCellValue(m["product type"]);
+    const validFrom =
+      normalizeCellValue(m["validfrom"]) ||
+      normalizeCellValue(m["valid_from"]) ||
+      normalizeCellValue(m["valid from"]);
+    const validTo =
+      normalizeCellValue(m["validto"]) ||
+      normalizeCellValue(m["valid_to"]) ||
+      normalizeCellValue(m["valid to"]);
+
+    if (!serial.trim()) continue;
+
+    parsed.push({ serial, batchId, productType, validFrom, validTo });
+  }
+  return parsed;
+}
+
+function findDeviceIdColumnInMatrix(matrix: unknown[][]): { headerRow: number; col: number } | null {
+  for (let r = 0; r < Math.min(matrix.length, 30); r++) {
+    const row = matrix[r];
+    if (!Array.isArray(row)) continue;
+    for (let c = 0; c < row.length; c++) {
+      const key = normalizeExcelHeaderKey(String(row[c] ?? ""));
+      if (DEVICE_ID_HEADER_KEYS.has(key)) return { headerRow: r, col: c };
+    }
+  }
+  return null;
+}
+
+/** When object-keys parsing yields no rows (common with .xls or a title row above headers). */
+function parseBulkSheetMatrixFallback(sheet: XLSX.WorkSheet): SerialBulkRowShape[] {
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][];
+  if (!matrix.length) return [];
+
+  const found = findDeviceIdColumnInMatrix(matrix);
+  if (found) {
+    const { headerRow, col } = found;
+    const parsed: SerialBulkRowShape[] = [];
+    for (let r = headerRow + 1; r < matrix.length; r++) {
+      const row = matrix[r];
+      if (!Array.isArray(row)) continue;
+      const serial = normalizeCellValue(row[col]);
+      if (!serial.trim()) continue;
+      parsed.push({ serial, batchId: "", productType: "", validFrom: "", validTo: "" });
+    }
+    return parsed;
+  }
+
+  const maxCols = Math.max(0, ...matrix.map((r) => (Array.isArray(r) ? r.length : 0)));
+  if (maxCols === 1) {
+    const parsed: SerialBulkRowShape[] = [];
+    let start = 0;
+    const firstCell = normalizeCellValue(Array.isArray(matrix[0]) ? matrix[0][0] : "");
+    if (DEVICE_ID_HEADER_KEYS.has(normalizeExcelHeaderKey(firstCell))) start = 1;
+    for (let r = start; r < matrix.length; r++) {
+      const serial = normalizeCellValue(Array.isArray(matrix[r]) ? matrix[r][0] : "");
+      if (!serial.trim()) continue;
+      parsed.push({ serial, batchId: "", productType: "", validFrom: "", validTo: "" });
+    }
+    return parsed;
+  }
+
+  return [];
+}
+
+/** `sheet_to_html` may include scripts; sandboxed iframe blocks them and logs console noise. */
+function sanitizeExcelPreviewHtml(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+}
 
 const Devices: React.FC = () => {
   const navigate = useNavigate();
@@ -32,11 +181,14 @@ const Devices: React.FC = () => {
   const { data: devicesData, isLoading } = useQuery({
     queryKey: ["admin", "devices"],
     queryFn: () => adminApi.getDevices({ limit: 500 }),
-    staleTime: 0,
   });
 
   const devices: Device[] = useMemo(
-    () => (devicesData?.items ?? []).map(mapApiDeviceToDevice),
+    () =>
+      sortRecordsNewestFirst([...(devicesData?.items ?? [])] as Record<string, unknown>[], [
+        "createdAt",
+        "lastActionAt",
+      ]).map((d) => mapApiDeviceToDevice(d as ApiDevice)),
     [devicesData]
   );
 
@@ -45,24 +197,36 @@ const Devices: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const filtered = useMemo(
-    () =>
-      devices.filter((d) => {
-        const matchesSearch =
-          d.patientName.toLowerCase().includes(search.trim().toLowerCase()) ||
-          d.id.toLowerCase().includes(search.trim().toLowerCase()) ||
-          d.serialNumber.toLowerCase().includes(search.trim().toLowerCase());
-        if (!matchesSearch) return false;
-        if (assignmentFilter !== "all") {
-          const assigned = d.assignedCaregiver?.trim() ?? "";
-          const isUnassigned = !assigned || assigned === "—" || assigned === "-" || assigned === "N/A";
-          const matchesAssignment = assignmentFilter === "unassigned" ? isUnassigned : !isUnassigned;
-          if (!matchesAssignment) return false;
-        }
-        return true;
-      }),
-    [devices, search, assignmentFilter]
-  );
+  const isDevicePatientAssigned = useCallback((d: Device) => {
+    if (d.patientId?.trim()) return true;
+    const pn = d.patientName?.trim() ?? "";
+    return pn.length > 0 && pn !== "—" && pn !== "-" && pn !== "N/A";
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const matches = devices.filter((d) => {
+      const matchesSearch =
+        !q ||
+        d.patientName.toLowerCase().includes(q) ||
+        d.id.toLowerCase().includes(q) ||
+        d.serialNumber.toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+      if (assignmentFilter !== "all") {
+        const assigned = isDevicePatientAssigned(d);
+        const matchesAssignment = assignmentFilter === "unassigned" ? !assigned : assigned;
+        if (!matchesAssignment) return false;
+      }
+      return true;
+    });
+    return [...matches].sort((a, b) => {
+      const pa = isDevicePatientAssigned(a);
+      const pb = isDevicePatientAssigned(b);
+      if (pa && !pb) return -1;
+      if (!pa && pb) return 1;
+      return 0;
+    });
+  }, [devices, search, assignmentFilter, isDevicePatientAssigned]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
@@ -108,29 +272,37 @@ const Devices: React.FC = () => {
   const [bulkImportedRows, setBulkImportedRows] = useState<SerialBulkRow[]>([]);
   /** Last successfully parsed Excel file (for name display + preview). */
   const [bulkSelectedFile, setBulkSelectedFile] = useState<File | null>(null);
-  const bulkPreviewObjectUrlRef = useRef<string | null>(null);
+  /** In-dialog HTML preview of the first sheet (avoids pop-up blockers and .xlsx download behavior). */
+  const [bulkExcelPreviewDoc, setBulkExcelPreviewDoc] = useState<string | null>(null);
 
-  const revokeBulkPreviewUrl = useCallback(() => {
-    const url = bulkPreviewObjectUrlRef.current;
-    if (url) {
-      URL.revokeObjectURL(url);
-      bulkPreviewObjectUrlRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => revokeBulkPreviewUrl(), [revokeBulkPreviewUrl]);
-
-  const openBulkFilePreview = useCallback(() => {
+  const toggleBulkExcelPreview = useCallback(async () => {
     if (!bulkSelectedFile) return;
-    revokeBulkPreviewUrl();
-    const url = URL.createObjectURL(bulkSelectedFile);
-    bulkPreviewObjectUrlRef.current = url;
-    const win = window.open(url, "_blank", "noopener,noreferrer");
-    if (!win) {
-      toast.error("Pop-up blocked. Allow pop-ups to open the file.");
-      revokeBulkPreviewUrl();
+    if (bulkExcelPreviewDoc) {
+      setBulkExcelPreviewDoc(null);
+      return;
     }
-  }, [bulkSelectedFile, revokeBulkPreviewUrl]);
+    try {
+      const data = await bulkSelectedFile.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+      if (!sheet) {
+        toast.error("Could not read the first sheet.");
+        return;
+      }
+      const tableHtml = sanitizeExcelPreviewHtml(XLSX.utils.sheet_to_html(sheet));
+      setBulkExcelPreviewDoc(
+        `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>
+          body{font-family:system-ui,-apple-system,sans-serif;margin:12px;font-size:13px;color:#111}
+          table{border-collapse:collapse;width:100%;max-width:100%}
+          td,th{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
+          th{background:#f4f4f5;font-weight:600}
+        </style></head><body>${tableHtml}</body></html>`
+      );
+    } catch {
+      toast.error("Could not preview this file.");
+    }
+  }, [bulkSelectedFile, bulkExcelPreviewDoc]);
 
   function toSerialBulkItem(row: SerialBulkRow): SerialBulkItem {
     const serial = row.serial.trim();
@@ -141,6 +313,7 @@ const Devices: React.FC = () => {
 
     return {
       serial,
+      deviceId: serial,
       ...(batchId ? { batchId } : {}),
       ...(productType ? { productType } : {}),
       ...(validFrom ? { validFrom } : {}),
@@ -166,72 +339,19 @@ const Devices: React.FC = () => {
     return { ok: true as const };
   }
 
-  function normalizeCellValue(v: unknown): string {
-    if (v == null) return "";
-    if (typeof v === "string") return v.trim();
-    if (typeof v === "number") return String(v);
-    if (v instanceof Date) return v.toISOString().slice(0, 10);
-    return String(v).trim();
-  }
-
   /** First worksheet of an Excel `.xlsx` / `.xls` file. */
   async function parseBulkFile(file: File) {
     const data = await file.arrayBuffer();
     const workbook = XLSX.read(data, { type: "array" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return [];
+
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-
-    const toLowerMap = (row: Record<string, unknown>) => {
-      const m: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(row)) m[k.toLowerCase().trim()] = v;
-      return m;
-    };
-
-    const parsed: SerialBulkRow[] = [];
-    for (const row of rows) {
-      const m = toLowerMap(row);
-
-      const serial =
-        normalizeCellValue(m["device id"]) ||
-        normalizeCellValue(m["deviceid"]) ||
-        normalizeCellValue(m["device_id"]) ||
-        normalizeCellValue(m["dev id"]) ||
-        normalizeCellValue(m["dev_id"]) ||
-        normalizeCellValue(m["serial"]) ||
-        normalizeCellValue(m["serialnumber"]) ||
-        normalizeCellValue(m["serial_number"]) ||
-        normalizeCellValue(m["serial no"]) ||
-        normalizeCellValue(m["sn"]);
-      const batchId =
-        normalizeCellValue(m["batchid"]) ||
-        normalizeCellValue(m["batch_id"]) ||
-        normalizeCellValue(m["batch"]) ||
-        normalizeCellValue(m["batch id"]);
-      const productType =
-        normalizeCellValue(m["producttype"]) ||
-        normalizeCellValue(m["product_type"]) ||
-        normalizeCellValue(m["product type"]);
-      const validFrom =
-        normalizeCellValue(m["validfrom"]) ||
-        normalizeCellValue(m["valid_from"]) ||
-        normalizeCellValue(m["valid from"]);
-      const validTo =
-        normalizeCellValue(m["validto"]) ||
-        normalizeCellValue(m["valid_to"]) ||
-        normalizeCellValue(m["valid to"]);
-
-      if (!serial.trim()) continue;
-
-      parsed.push({
-        serial,
-        batchId,
-        productType,
-        validFrom,
-        validTo,
-      });
+    let parsed: SerialBulkRow[] = parseBulkSheetObjectRows(rows);
+    if (parsed.length === 0) {
+      parsed = parseBulkSheetMatrixFallback(sheet);
     }
-
     return parsed;
   }
 
@@ -242,7 +362,7 @@ const Devices: React.FC = () => {
       return;
     }
 
-    const item: SerialBulkItem = { serial: deviceId };
+    const item: SerialBulkItem = { serial: deviceId, deviceId };
 
     setAddDeviceSubmitting(true);
     try {
@@ -287,7 +407,7 @@ const Devices: React.FC = () => {
       setBulkUploadOpen(false);
       setBulkImportedRows([]);
       setBulkSelectedFile(null);
-      revokeBulkPreviewUrl();
+      setBulkExcelPreviewDoc(null);
 
       toast.success(`Devices added: uploaded ${res.uploaded}, rejected ${res.rejected}.`);
       if ((res.rejected ?? 0) > 0 && res.fieldErrors && Object.keys(res.fieldErrors).length > 0) {
@@ -297,7 +417,7 @@ const Devices: React.FC = () => {
         });
       }
     } catch (e) {
-      toast.error((e as Error)?.message ?? "Bulk upload failed");
+      toast.error((e as Error)?.message ?? "Could not register devices from this file");
     } finally {
       setBulkUploadSubmitting(false);
     }
@@ -581,11 +701,15 @@ const Devices: React.FC = () => {
           if (!open) {
             setBulkImportedRows([]);
             setBulkSelectedFile(null);
-            revokeBulkPreviewUrl();
+            setBulkExcelPreviewDoc(null);
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent
+          className={
+            bulkExcelPreviewDoc ? "sm:max-w-3xl max-h-[90vh] flex flex-col gap-0 overflow-hidden" : "sm:max-w-lg"
+          }
+        >
           <DialogHeader>
             <DialogTitle>Bulk upload</DialogTitle>
             <DialogDescription>
@@ -612,7 +736,7 @@ const Devices: React.FC = () => {
                       toast.error("Please choose an Excel file (.xlsx or .xls).");
                       setBulkImportedRows([]);
                       setBulkSelectedFile(null);
-                      revokeBulkPreviewUrl();
+                      setBulkExcelPreviewDoc(null);
                       return;
                     }
                     const parsed = await parseBulkFile(file);
@@ -620,10 +744,10 @@ const Devices: React.FC = () => {
                       toast.error("No valid rows found in this Excel file.");
                       setBulkImportedRows([]);
                       setBulkSelectedFile(null);
-                      revokeBulkPreviewUrl();
+                      setBulkExcelPreviewDoc(null);
                       return;
                     }
-                    revokeBulkPreviewUrl();
+                    setBulkExcelPreviewDoc(null);
                     setBulkImportedRows(parsed);
                     setBulkSelectedFile(file);
                     toast.success(`Imported ${parsed.length} row${parsed.length !== 1 ? "s" : ""}. Click Upload to register.`);
@@ -631,7 +755,7 @@ const Devices: React.FC = () => {
                     toast.error((err as Error)?.message ?? "Could not read this Excel file.");
                     setBulkImportedRows([]);
                     setBulkSelectedFile(null);
-                    revokeBulkPreviewUrl();
+                    setBulkExcelPreviewDoc(null);
                   } finally {
                     setBulkImporting(false);
                     e.target.value = "";
@@ -642,15 +766,27 @@ const Devices: React.FC = () => {
                 <div className="space-y-1">
                   <button
                     type="button"
-                    title="Open in new tab"
+                    title={bulkExcelPreviewDoc ? "Hide preview" : "Show preview"}
                     className="text-left text-sm font-medium text-primary hover:underline focus:outline-none focus:underline"
-                    onClick={openBulkFilePreview}
+                    onClick={() => void toggleBulkExcelPreview()}
                   >
                     {bulkSelectedFile.name}
                   </button>
                   <p className="text-xs text-muted-foreground">
                     {bulkImportedRows.length} row{bulkImportedRows.length !== 1 ? "s" : ""}
+                    {" · "}
+                    <span className="text-muted-foreground/90">click name to preview the sheet here</span>
                   </p>
+                  {bulkExcelPreviewDoc ? (
+                    <div className="mt-2 rounded-md border bg-background overflow-hidden shrink-0 min-h-0 flex flex-col">
+                      <iframe
+                        title="Excel preview"
+                        srcDoc={bulkExcelPreviewDoc}
+                        sandbox="allow-same-origin"
+                        className="w-full h-[min(55vh,420px)] border-0 bg-white dark:bg-card"
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

@@ -1,4 +1,4 @@
-import { adminFetch, adminGet, adminPost, adminPatch } from "./client";
+import { adminFetch, adminGet, adminPost, adminPatch, adminDelete } from "./client";
 import type {
   LoginResponse,
   RefreshResponse,
@@ -106,6 +106,20 @@ export const adminApi = {
     );
   },
 
+  updateCaregiver(
+    id: string,
+    body: { name?: string; email?: string; phone?: string }
+  ) {
+    return adminPatch<{ item: CaregiversListResponse["items"][0] }>(
+      `admin/caregivers/${encodeURIComponent(id)}`,
+      body
+    );
+  },
+
+  deleteCaregiver(id: string) {
+    return adminDelete<{ deleted: boolean }>(`admin/caregivers/${encodeURIComponent(id)}`);
+  },
+
   getPharmacies(params?: { limit?: number; cursor?: string }) {
     const q: Record<string, string | number | undefined> = {};
     if (params?.limit != null) q.limit = params.limit;
@@ -122,6 +136,17 @@ export const adminApi = {
       `admin/pharmacies/${encodeURIComponent(id)}/status`,
       { enabled }
     );
+  },
+
+  updatePharmacy(id: string, body: { name?: string; email?: string }) {
+    return adminPatch<{ item: PharmaciesListResponse["items"][0] }>(
+      `admin/pharmacies/${encodeURIComponent(id)}`,
+      body
+    );
+  },
+
+  deletePharmacy(id: string) {
+    return adminDelete<{ deleted: boolean }>(`admin/pharmacies/${encodeURIComponent(id)}`);
   },
 
   getAlertsSummary() {

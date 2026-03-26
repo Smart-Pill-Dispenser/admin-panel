@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -37,7 +38,10 @@ const HelpSupport: React.FC = () => {
     queryFn: () => adminApi.getHelpRequests({ limit: 500 }),
   });
 
-  const requests: ApiHelpRequest[] = useMemo(() => data?.items ?? [], [data]);
+  const requests: ApiHelpRequest[] = useMemo(
+    () => sortRecordsNewestFirst([...(data?.items ?? [])] as Record<string, unknown>[], ["timestamp"]) as ApiHelpRequest[],
+    [data]
+  );
 
   const [resolveDialog, setResolveDialog] = useState<{ open: boolean; req: ApiHelpRequest | null }>({ open: false, req: null });
   const [resolveIssue, setResolveIssue] = useState("");

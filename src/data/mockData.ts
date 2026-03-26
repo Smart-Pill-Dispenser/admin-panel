@@ -2,6 +2,8 @@ export interface Device {
   id: string;
   serialNumber: string;
   patientName: string;
+  /** Present when a pharmacy assigned this device to a patient (Dynamo `patientId`). */
+  patientId?: string | null;
   status: "online" | "offline" | "error" | "stopped";
   remainingPouches: number;
   totalPouches: number;

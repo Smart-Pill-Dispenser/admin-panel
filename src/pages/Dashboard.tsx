@@ -1,11 +1,18 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Monitor, HelpCircle, Bell, Package } from "lucide-react";
+import { Monitor, HelpCircle, Bell, Package, UserCheck } from "lucide-react";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { adminApi } from "@/api/admin";
+import type { ApiDevice } from "@/api/types";
+
+function apiDeviceHasPatient(d: ApiDevice | Record<string, unknown>): boolean {
+  const pid = String((d as ApiDevice).patientId ?? "").trim();
+  return pid.length > 0;
+}
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 import { mapApiDeviceToDevice } from "@/api/deviceMappers";
 import type { Device } from "@/data/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
@@ -34,27 +41,43 @@ const Dashboard: React.FC = () => {
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
     queryKey: ["admin", "dashboard"],
     queryFn: () => adminApi.getDashboard(),
-    staleTime: 0,
   });
 
   const { data: devicesData, isLoading: devicesLoading } = useQuery({
     queryKey: ["admin", "devices"],
     queryFn: () => adminApi.getDevices({ limit: 100 }),
-    staleTime: 0,
   });
 
   const isDashboardLoading = dashboardLoading || devicesLoading;
 
   const devices: Device[] = useMemo(
-    () => (devicesData?.items ?? []).map(mapApiDeviceToDevice),
+    () =>
+      sortRecordsNewestFirst([...(devicesData?.items ?? [])] as Record<string, unknown>[], [
+        "createdAt",
+        "lastActionAt",
+      ]).map((d) => mapApiDeviceToDevice(d as ApiDevice)),
     [devicesData]
   );
 
+  const assignedDeviceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const raw of (devicesData?.items ?? []) as ApiDevice[]) {
+      if (apiDeviceHasPatient(raw)) ids.add(raw.id);
+    }
+    return ids;
+  }, [devicesData?.items]);
+
+  const assignedDevices = useMemo(
+    () => devices.filter((d) => assignedDeviceIds.has(d.id)),
+    [devices, assignedDeviceIds]
+  );
+
   const totalDevices = dashboardData?.totalDevices ?? 0;
-  const onlineDevices = dashboardData?.deviceStatus?.online ?? 0;
+  const assignedDeviceCount = assignedDevices.length;
+
   const needsRefillCount = useMemo(
-    () => devices.filter((d) => d.remainingPouches <= d.refillThreshold).length,
-    [devices]
+    () => assignedDevices.filter((d) => d.remainingPouches <= d.refillThreshold).length,
+    [assignedDevices]
   );
   const pendingAlerts = dashboardData?.alerts?.unacknowledged ?? 0;
 
@@ -64,8 +87,8 @@ const Dashboard: React.FC = () => {
   );
 
   const refillDevices = useMemo(
-    () => devices.filter((d) => d.remainingPouches <= d.refillThreshold),
-    [devices]
+    () => assignedDevices.filter((d) => d.remainingPouches <= d.refillThreshold),
+    [assignedDevices]
   );
 
   return (
@@ -86,10 +109,10 @@ const Dashboard: React.FC = () => {
           loading={isDashboardLoading}
         />
         <StatCard
-          title="Devices Online"
-          value={onlineDevices}
-          icon={<Monitor className="h-5 w-5 text-success" />}
-          trend="online"
+          title="Assigned devices"
+          value={assignedDeviceCount}
+          icon={<UserCheck className="h-5 w-5 text-success" />}
+          trend="with patient"
           variant="success"
           loading={isDashboardLoading}
         />

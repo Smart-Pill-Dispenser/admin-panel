@@ -68,10 +68,19 @@ const DeviceDetail: React.FC = () => {
     queryFn: () => adminApi.getDevices({ limit: 500 }),
   });
 
-  const apiDevice: ApiDevice | undefined = useMemo(
-    () => devicesData?.items?.find((d) => d.id === id),
-    [devicesData, id]
-  );
+  const apiDevice: ApiDevice | undefined = useMemo(() => {
+    const list = devicesData?.items ?? [];
+    if (!id) return undefined;
+    const decoded = decodeURIComponent(id);
+    const norm = (s: string) => s.trim().replace(/\s+/g, " ");
+    const want = norm(decoded);
+    return list.find((d) => {
+      if (d.id === id || d.id === decoded) return true;
+      const sn = (d.serialNumber ?? "").trim();
+      if (!sn) return false;
+      return sn === id || sn === decoded || norm(sn) === want;
+    });
+  }, [devicesData, id]);
 
   const device: Device | undefined = useMemo(() => {
     return apiDevice ? mapApiDeviceToDevice(apiDevice) : undefined;

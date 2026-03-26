@@ -1,17 +1,21 @@
 import React from "react";
 import { Users, Search } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
-import { mockCaregivers } from "@/data/mockData";
+import { mockCaregivers, type Caregiver } from "@/data/mockData";
 import { Input } from "@/components/ui/input";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 
 const Caregivers: React.FC = () => {
   const [search, setSearch] = React.useState("");
 
-  const filtered = mockCaregivers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = React.useMemo(() => {
+    const list = mockCaregivers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.email.toLowerCase().includes(search.toLowerCase())
+    );
+    return sortRecordsNewestFirst(list as unknown as Record<string, unknown>[], []) as unknown as Caregiver[];
+  }, [search]);
 
   return (
     <div className="space-y-6 animate-slide-in">

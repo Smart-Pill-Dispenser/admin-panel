@@ -4,11 +4,10 @@ import React, { useState, useCallback, useMemo, useEffect } from "react";
 const SHOW_ADD_PHARMACY_BUTTON = false;
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, Search, Eye, Filter, X } from "lucide-react";
+import { Building2, Search, Filter, X, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -18,6 +17,15 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -38,6 +46,7 @@ import LoadingCard from "@/components/LoadingCard";
 import type { Pharmacy } from "@/data/mockData";
 import type { CreatePharmacyUserCredentials } from "@/api/types";
 import { adminApi } from "@/api/admin";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -53,22 +62,47 @@ function mapApiPharmacyToPharmacy(api: { id: string; name: string; email: string
 const PharmacyList: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [removeTarget, setRemoveTarget] = useState<Pharmacy | null>(null);
+  const [editTarget, setEditTarget] = useState<Pharmacy | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const { data: pharmaciesData, isLoading } = useQuery({
     queryKey: ["admin", "pharmacies"],
     queryFn: () => adminApi.getPharmacies({ limit: 500 }),
   });
 
+  useEffect(() => {
+    if (editTarget) {
+      setEditName(editTarget.name);
+      setEditEmail(editTarget.email);
+    }
+  }, [editTarget]);
+
   const pharmacies: Pharmacy[] = useMemo(
-    () => (pharmaciesData?.items ?? []).map(mapApiPharmacyToPharmacy),
+    () =>
+      sortRecordsNewestFirst([...(pharmaciesData?.items ?? [])] as Record<string, unknown>[], ["createdAt"]).map((row) =>
+        mapApiPharmacyToPharmacy(row as { id: string; name: string; email: string; enabled: boolean })
+      ),
     [pharmaciesData]
   );
 
-  const updateStatus = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      adminApi.updatePharmacyStatus(id, enabled),
+  const savePharmacyEdit = useMutation({
+    mutationFn: (p: { id: string; name: string; email: string }) =>
+      adminApi.updatePharmacy(p.id, { name: p.name.trim(), email: p.email.trim() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "pharmacies"] });
-      toast.success("Pharmacy status updated");
+      toast.success("Pharmacy updated");
+      setEditTarget(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deletePharmacy = useMutation({
+    mutationFn: (id: string) => adminApi.deletePharmacy(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "pharmacies"] });
+      toast.success("Pharmacy removed");
+      setRemoveTarget(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -101,13 +135,6 @@ const PharmacyList: React.FC = () => {
   const paginated = useMemo(
     () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
     [filtered, safePage, pageSize]
-  );
-
-  const setPharmacyStatus = useCallback(
-    (id: string, status: "active" | "inactive") => {
-      updateStatus.mutate({ id, enabled: status === "active" });
-    },
-    [updateStatus]
   );
 
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
@@ -166,7 +193,7 @@ const PharmacyList: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Pharmacies</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            View details and enable or disable pharmacy access.
+            Search, filter by status, edit details, or remove a pharmacy.
           </p>
         </div>
         {SHOW_ADD_PHARMACY_BUTTON && (
@@ -291,29 +318,62 @@ const PharmacyList: React.FC = () => {
                     <StatusBadge status={pharmacy.status} />
                   </TableCell>
                   <TableCell className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-0.5">
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => navigate(`/user-management/pharmacy/${pharmacy.id}`, { state: { pharmacy } })}
-                        aria-label="View details"
+                        className="h-8 w-8 text-primary hover:text-primary"
+                        title="Edit pharmacy"
+                        aria-label="Edit pharmacy"
+                        onClick={() => setEditTarget(pharmacy)}
                       >
-                        <Eye className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                      <Switch
-                        checked={pharmacy.status === "active"}
-                        disabled={updateStatus.isPending}
-                        onCheckedChange={(checked) =>
-                          setPharmacyStatus(pharmacy.id, checked ? "active" : "inactive")
-                        }
-                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        title="Remove pharmacy"
+                        aria-label="Remove pharmacy"
+                        disabled={deletePharmacy.isPending}
+                        onClick={() => setRemoveTarget(pharmacy)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+
+          <AlertDialog open={removeTarget != null} onOpenChange={(o) => !o && !deletePharmacy.isPending && setRemoveTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove pharmacy?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {removeTarget ? (
+                    <>
+                      Permanently delete <span className="font-medium text-foreground">{removeTarget.name}</span> and its
+                      login user ({removeTarget.email}). Devices and data linked to this pharmacy may need separate cleanup.
+                    </>
+                  ) : null}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletePharmacy.isPending}>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={deletePharmacy.isPending || !removeTarget}
+                  onClick={() => removeTarget && deletePharmacy.mutate(removeTarget.id)}
+                >
+                  {deletePharmacy.isPending ? "Removing…" : "Remove"}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
@@ -366,6 +426,63 @@ const PharmacyList: React.FC = () => {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={editTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !savePharmacyEdit.isPending) setEditTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Edit pharmacy</DialogTitle>
+            <DialogDescription>Update the pharmacy name and login email shown in the system.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-pharmacy-name">Pharmacy name</Label>
+              <Input
+                id="edit-pharmacy-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                disabled={savePharmacyEdit.isPending}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-pharmacy-email">Email (login)</Label>
+              <Input
+                id="edit-pharmacy-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                disabled={savePharmacyEdit.isPending}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)} disabled={savePharmacyEdit.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editTarget) return;
+                if (!editName.trim() || !editEmail.trim()) {
+                  toast.error("Name and email are required");
+                  return;
+                }
+                savePharmacyEdit.mutate({
+                  id: editTarget.id,
+                  name: editName,
+                  email: editEmail,
+                });
+              }}
+              disabled={savePharmacyEdit.isPending || !editName.trim() || !editEmail.trim()}
+            >
+              {savePharmacyEdit.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createOpen} onOpenChange={(open) => (!open ? closeCreateDialog() : setCreateOpen(open))}>
         <DialogContent className="sm:max-w-md">

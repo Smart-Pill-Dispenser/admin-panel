@@ -50,6 +50,8 @@ export interface ApiDevice {
   lastActionAt?: string;
   lastActionReason?: string;
   pharmacyName?: string;
+  /** When present (e.g. bulk registration), used to sort newest-first in lists. */
+  createdAt?: string;
 }
 
 export interface DevicesListResponse {
@@ -76,9 +78,12 @@ export interface ApiCaregiver {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role?: string;
   isActive: boolean;
   linkedDeviceIds?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CaregiversListResponse {
@@ -93,6 +98,7 @@ export interface ApiPharmacy {
   name: string;
   email: string;
   enabled: boolean;
+  createdAt?: string;
 }
 
 export interface PharmaciesListResponse {
@@ -123,7 +129,7 @@ export interface AlertsSummaryResponse {
   unacknowledgedAlerts: number;
 }
 
-/** POST /admin/serials/bulk request item — only `serial` or `deviceId` required; `batchId` optional (server defaults). */
+/** POST /admin/serials/bulk request item — device id via `deviceId` and/or legacy `serial`; `batchId` optional (server defaults). */
 export interface SerialBulkItem {
   serial?: string;
   deviceId?: string;
