@@ -35,19 +35,7 @@ function RouteRestorer() {
   // can happen before `useEffect` runs on refresh.
   try {
     if (!PUBLIC_PATHS.includes(location.pathname)) {
-      // Important: don't overwrite an already-saved non-root route when the
-      // current pathname is `/`, otherwise refresh will "lose" the original
-      // deep link and fall back to the dashboard.
-      const existing = sessionStorage.getItem(LAST_ROUTE_KEY);
-      const next = location.pathname + location.search;
-
-      if (location.pathname === "/") {
-        if (existing === null || existing === "/") {
-          sessionStorage.setItem(LAST_ROUTE_KEY, next);
-        }
-      } else {
-        sessionStorage.setItem(LAST_ROUTE_KEY, next);
-      }
+      sessionStorage.setItem(LAST_ROUTE_KEY, location.pathname + location.search);
     }
   } catch {
     // Non-fatal (storage might be blocked)

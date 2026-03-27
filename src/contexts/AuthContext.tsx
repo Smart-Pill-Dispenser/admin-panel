@@ -30,8 +30,14 @@ function loadStoredAuth(): { token: string | null; user: AuthContextType["user"]
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<AuthContextType["user"]>(null);
+  // Match pharmacy panel: hydrate auth synchronously so a refresh on a deep link does not
+  // briefly treat the user as logged out and redirect to /login (which drops the URL before
+  // RouteRestorer can persist it).
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const { token, user: u } = loadStoredAuth();
+    return !!(token && u);
+  });
+  const [user, setUser] = useState<AuthContextType["user"]>(() => loadStoredAuth().user);
 
   // Set token getter immediately so the first API request (e.g. Dashboard) has the token
   setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
@@ -43,6 +49,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (token && u) {
         setIsAuthenticated(true);
         setUser(u);
+      } else {
+        setIsAuthenticated(false);
+        setUser(null);
       }
     })();
   }, []);

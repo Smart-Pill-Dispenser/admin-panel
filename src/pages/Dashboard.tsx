@@ -134,7 +134,7 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* Analytics – only chart we have real data for */}
+      {/* Device status chart + refill / pending alerts (two columns on lg) */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-foreground">Device Status</h2>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -174,108 +174,106 @@ const Dashboard: React.FC = () => {
               </ResponsiveContainer>
             )}
           </div>
+
+          <div className="flex flex-col gap-6 min-w-0">
+            {/* Refill Alerts – from API devices only */}
+            <div className="rounded-xl border bg-card shadow-card flex-1 flex flex-col min-h-0">
+              <div className="flex items-center gap-2 border-b p-4 shrink-0">
+                <Bell className="h-4 w-4 text-warning" />
+                <h2 className="font-semibold text-card-foreground">Refill Alerts</h2>
+              </div>
+              <div className="divide-y flex-1 overflow-auto max-h-[280px]">
+                {refillDevices.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">No devices below threshold</div>
+                ) : (
+                  refillDevices.map((d) => (
+                    <div
+                      key={d.id}
+                      className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                      onClick={() => navigate(`/devices/${d.id}`)}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-medium text-card-foreground">{d.patientName}</p>
+                        {d.remainingPouches === 0 && (
+                          <span className="text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
+                            Urgent
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {d.id} — {d.remainingPouches} pouches left
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Pending Alerts – count from API; no list until backend has alerts list endpoint */}
+            <div className="rounded-xl border bg-card shadow-card shrink-0">
+              <div className="flex items-center justify-between border-b p-4">
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4 text-info" />
+                  <h2 className="font-semibold text-card-foreground">Pending Alerts</h2>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/help-support")}>
+                  View All
+                </Button>
+              </div>
+              <div className="p-4">
+                <p className="text-sm text-card-foreground">
+                  <span className="font-medium">{pendingAlerts}</span> unacknowledged alert{pendingAlerts !== 1 ? "s" : ""}
+                </p>
+                {pendingAlerts === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">No pending alerts</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Devices Overview – from API only */}
-        <div className="lg:col-span-2 rounded-xl border bg-card shadow-card">
-          <div className="flex items-center justify-between border-b p-4">
-            <h2 className="font-semibold text-card-foreground">Devices Overview</h2>
-            <Button variant="outline" size="sm" onClick={() => navigate("/devices")}>
-              View All
-            </Button>
-          </div>
-          <div className="divide-y">
-            {devices.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">No devices</div>
-            ) : (
-              devices.map((device) => (
-                <div
-                  key={device.id}
-                  className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/devices/${device.id}`)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent">
-                      <Monitor className="h-4 w-4 text-accent-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-card-foreground">{device.patientName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {device.id} • {device.serialNumber}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                      <p className="text-sm text-card-foreground">
-                        {device.remainingPouches}/{device.totalPouches}
-                      </p>
-                      <p className="text-xs text-muted-foreground">pouches</p>
-                    </div>
-                    <StatusBadge status={device.status} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+      {/* Devices Overview – full width */}
+      <div className="rounded-xl border bg-card shadow-card w-full">
+        <div className="flex items-center justify-between border-b p-4">
+          <h2 className="font-semibold text-card-foreground">Devices Overview</h2>
+          <Button variant="outline" size="sm" onClick={() => navigate("/devices")}>
+            View All
+          </Button>
         </div>
-
-        <div className="space-y-6">
-          {/* Refill Alerts – from API devices only */}
-          <div className="rounded-xl border bg-card shadow-card">
-            <div className="flex items-center gap-2 border-b p-4">
-              <Bell className="h-4 w-4 text-warning" />
-              <h2 className="font-semibold text-card-foreground">Refill Alerts</h2>
-            </div>
-            <div className="divide-y">
-              {refillDevices.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">No devices below threshold</div>
-              ) : (
-                refillDevices.map((d) => (
-                  <div
-                    key={d.id}
-                    className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/devices/${d.id}`)}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium text-card-foreground">{d.patientName}</p>
-                      {d.remainingPouches === 0 && (
-                        <span className="text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
-                          Urgent
-                        </span>
-                      )}
-                    </div>
+        <div className="divide-y">
+          {devices.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">No devices</div>
+          ) : (
+            devices.map((device) => (
+              <div
+                key={device.id}
+                className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                onClick={() => navigate(`/devices/${device.id}`)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent">
+                    <Monitor className="h-4 w-4 text-accent-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-card-foreground">{device.patientName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {d.id} — {d.remainingPouches} pouches left
+                      {device.id} • {device.serialNumber}
                     </p>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Pending Alerts – count from API; no list until backend has alerts list endpoint */}
-          <div className="rounded-xl border bg-card shadow-card">
-            <div className="flex items-center justify-between border-b p-4">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="h-4 w-4 text-info" />
-                <h2 className="font-semibold text-card-foreground">Pending Alerts</h2>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-sm text-card-foreground">
+                      {device.remainingPouches}/{device.totalPouches}
+                    </p>
+                    <p className="text-xs text-muted-foreground">pouches</p>
+                  </div>
+                  <StatusBadge status={device.status} />
+                </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/help-support")}>
-                View All
-              </Button>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-card-foreground">
-                <span className="font-medium">{pendingAlerts}</span> unacknowledged alert{pendingAlerts !== 1 ? "s" : ""}
-              </p>
-              {pendingAlerts === 0 && (
-                <p className="text-xs text-muted-foreground mt-1">No pending alerts</p>
-              )}
-            </div>
-          </div>
+            ))
+          )}
         </div>
       </div>
     </div>
