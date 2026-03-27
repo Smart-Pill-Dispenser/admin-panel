@@ -42,29 +42,12 @@ import StatusBadge from "@/components/StatusBadge";
 import LoadingCard from "@/components/LoadingCard";
 import type { Caregiver } from "@/data/mockData";
 import { adminApi } from "@/api/admin";
+import type { ApiCaregiver } from "@/api/types";
 import { sortRecordsNewestFirst } from "@/lib/listSort";
+import { mapApiCaregiverToCaregiver } from "@/lib/caregiverFromApi";
+import { formatCaregiverDateTime } from "@/lib/caregiverDisplay";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
-
-function mapApiCaregiverToCaregiver(api: {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  isActive: boolean;
-  linkedDeviceIds?: string[];
-}): Caregiver {
-  const phone =
-    typeof api.phone === "string" && api.phone.trim() ? api.phone.trim() : "—";
-  return {
-    id: api.id,
-    name: api.name,
-    email: api.email,
-    phone,
-    linkedDevices: api.linkedDeviceIds ?? [],
-    status: api.isActive ? "active" : "inactive",
-  };
-}
 
 const CaregiversList: React.FC = () => {
   const navigate = useNavigate();
@@ -90,17 +73,7 @@ const CaregiversList: React.FC = () => {
   const caregivers: Caregiver[] = useMemo(
     () =>
       sortRecordsNewestFirst([...(caregiversData?.items ?? [])] as Record<string, unknown>[], ["createdAt", "updatedAt"]).map(
-        (row) =>
-          mapApiCaregiverToCaregiver(
-            row as {
-              id: string;
-              name: string;
-              email: string;
-              phone?: string;
-              isActive: boolean;
-              linkedDeviceIds?: string[];
-            }
-          )
+        (row) => mapApiCaregiverToCaregiver(row as ApiCaregiver)
       ),
     [caregiversData]
   );
@@ -137,11 +110,13 @@ const CaregiversList: React.FC = () => {
 
   const filtered = useMemo(
     () => {
+      const q = search.trim().toLowerCase();
       let list = caregivers.filter(
         (c) =>
-          c.name.toLowerCase().includes(search.trim().toLowerCase()) ||
-          c.email.toLowerCase().includes(search.trim().toLowerCase()) ||
-          c.phone.includes(search.trim())
+          c.name.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          c.phone.includes(search.trim()) ||
+          (c.organizationId ?? "").toLowerCase().includes(q)
       );
       if (statusFilter !== "all") list = list.filter((c) => c.status === statusFilter);
       return list;
@@ -277,6 +252,7 @@ const CaregiversList: React.FC = () => {
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Phone</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Linked devices</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Last updated</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</TableHead>
                 <TableHead className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</TableHead>
               </TableRow>
@@ -307,6 +283,9 @@ const CaregiversList: React.FC = () => {
                     {caregiver.linkedDevices.length > 0
                       ? `${caregiver.linkedDevices.length} device${caregiver.linkedDevices.length !== 1 ? "s" : ""}`
                       : "—"}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-sm text-muted-foreground hidden xl:table-cell">
+                    {formatCaregiverDateTime(caregiver.updatedAt)}
                   </TableCell>
                   <TableCell className="px-4 py-3">
                     <StatusBadge status={caregiver.status} />

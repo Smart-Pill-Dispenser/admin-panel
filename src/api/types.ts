@@ -77,11 +77,16 @@ export interface DeviceLogsResponse {
 export interface ApiCaregiver {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   phone?: string;
   role?: string;
-  isActive: boolean;
+  /** Present after API normalization; legacy rows may only have `status`. */
+  isActive?: boolean;
+  status?: string;
   linkedDeviceIds?: string[];
+  /** Mirror of linkedDeviceIds for panels. */
+  linkedDevices?: string[];
+  organizationId?: string;
   createdAt?: string;
   updatedAt?: string;
 }

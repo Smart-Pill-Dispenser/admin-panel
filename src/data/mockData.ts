@@ -32,6 +32,9 @@ export interface Caregiver {
   phone: string;
   linkedDevices: string[];
   status: "active" | "inactive";
+  organizationId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /** Single pharmacy (admin scope: one pharmacy only; multiple pharmacies later). */

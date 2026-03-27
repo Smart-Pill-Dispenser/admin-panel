@@ -39,6 +39,37 @@ async function parseErrorResponse(res: Response): Promise<ApiErrorBody> {
   }
 }
 
+function jwtExpSeconds(token: string): number | null {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+    const payload = JSON.parse(atob(b64 + pad)) as { exp?: unknown };
+    if (typeof payload.exp === "number") return payload.exp;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** If the access token expires within [skewSec]s and a refresh token exists, refresh once. */
+export async function adminEnsureFreshAccessToken(skewSec = 120): Promise<void> {
+  const token = localStorage.getItem("admin_access_token");
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  if (!token || !refreshToken || !getStoredEmail()) return;
+  const exp = jwtExpSeconds(token);
+  if (exp == null) return;
+  const now = Math.floor(Date.now() / 1000);
+  if (exp > now + skewSec) return;
+  const next = await tryRefreshSession();
+  if (!next && exp <= now) {
+    localStorage.removeItem("admin_access_token");
+    localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(USER_KEY);
+  }
+}
+
 function getStoredEmail(): string | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
@@ -62,9 +93,10 @@ async function tryRefreshSession(): Promise<string | null> {
     body: JSON.stringify({ email, refreshToken }),
   });
   if (!res.ok) return null;
-  const data = (await res.json()) as { idToken?: string; accessToken?: string };
+  const data = (await res.json()) as { idToken?: string; accessToken?: string; refreshToken?: string };
   const token = data.idToken ?? data.accessToken ?? null;
   if (token) localStorage.setItem("admin_access_token", token);
+  if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
   return token;
 }
 
@@ -89,7 +121,8 @@ export async function adminFetch(
   const res = await fetch(url, { ...init, headers });
 
   if (!res.ok) {
-    if (res.status === 401 && !skipAuth && !alreadyRetried) {
+    const isAuthExpired = res.status === 401 || res.status === 403;
+    if (isAuthExpired && !skipAuth && !alreadyRetried) {
       const newToken = await tryRefreshSession();
       if (newToken) {
         const retryHeaders = new Headers(headers);
@@ -101,7 +134,7 @@ export async function adminFetch(
     }
 
     const body = await parseErrorResponse(res);
-    if (res.status === 401) onUnauthorized();
+    if (res.status === 401 || res.status === 403) onUnauthorized();
     throw new AdminApiError(body.code || "ERROR", body.message || res.statusText, res.status, body.fieldErrors);
   }
 

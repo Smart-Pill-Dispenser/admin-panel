@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { setAuthTokenGetter, setOnUnauthorized } from "@/api/client";
+import { adminEnsureFreshAccessToken, setAuthTokenGetter, setOnUnauthorized } from "@/api/client";
 import { adminApi } from "@/api/admin";
 import { AdminApiError } from "@/api/client";
 
@@ -37,11 +37,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
 
   useEffect(() => {
-    const { token, user: u } = loadStoredAuth();
-    if (token && u) {
-      setIsAuthenticated(true);
-      setUser(u);
-    }
+    void (async () => {
+      await adminEnsureFreshAccessToken();
+      const { token, user: u } = loadStoredAuth();
+      if (token && u) {
+        setIsAuthenticated(true);
+        setUser(u);
+      }
+    })();
   }, []);
 
   const logoutAndClear = useCallback(() => {
