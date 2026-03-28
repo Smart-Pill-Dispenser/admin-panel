@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Filter, Monitor, Plus, Search, Trash2, Upload, X } from "lucide-react";
@@ -176,6 +177,7 @@ function sanitizeExcelPreviewHtml(html: string): string {
 }
 
 const Devices: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: devicesData, isLoading } = useQuery({
@@ -287,7 +289,7 @@ const Devices: React.FC = () => {
       const sheetName = workbook.SheetNames[0];
       const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
       if (!sheet) {
-        toast.error("Could not read the first sheet.");
+        toast.error(t("common.couldNotReadSheet"));
         return;
       }
       const tableHtml = sanitizeExcelPreviewHtml(XLSX.utils.sheet_to_html(sheet));
@@ -300,7 +302,7 @@ const Devices: React.FC = () => {
         </style></head><body>${tableHtml}</body></html>`
       );
     } catch {
-      toast.error("Could not preview this file.");
+      toast.error(t("common.couldNotPreview"));
     }
   }, [bulkSelectedFile, bulkExcelPreviewDoc]);
 
@@ -332,10 +334,10 @@ const Devices: React.FC = () => {
         !!r.validFrom.trim() ||
         !!r.validTo.trim();
       if (!hasAny) continue;
-      if (!id) return { ok: false as const, message: "Each non-empty row must include a Device ID" };
+      if (!id) return { ok: false as const, message: t("devices.bulkRowMissingId") };
       validCount++;
     }
-    if (validCount === 0) return { ok: false as const, message: "No valid rows to upload" };
+    if (validCount === 0) return { ok: false as const, message: t("devices.bulkNoValid") };
     return { ok: true as const };
   }
 
@@ -358,7 +360,7 @@ const Devices: React.FC = () => {
   async function handleAddDevice() {
     const deviceId = addDeviceId.trim();
     if (!deviceId) {
-      toast.error("Device ID is required");
+      toast.error(t("common.deviceIdRequired"));
       return;
     }
 
@@ -373,15 +375,15 @@ const Devices: React.FC = () => {
       setAddDeviceOpen(false);
       setAddDeviceId("");
 
-      toast.success(`Devices added: uploaded ${res.uploaded}, rejected ${res.rejected}.`);
+      toast.success(t("devices.addSuccess", { uploaded: res.uploaded, rejected: res.rejected }));
       if ((res.rejected ?? 0) > 0 && res.fieldErrors && Object.keys(res.fieldErrors).length > 0) {
         const firstKey = Object.keys(res.fieldErrors)[0];
-        toast.error("Some entries were rejected.", {
+        toast.error(t("devices.rejectedPartial"), {
           description: `${firstKey}: ${res.fieldErrors[firstKey]}`,
         });
       }
     } catch (e) {
-      toast.error((e as Error)?.message ?? "Failed to add device");
+      toast.error((e as Error)?.message ?? t("devices.addFailed"));
     } finally {
       setAddDeviceSubmitting(false);
     }
@@ -389,7 +391,7 @@ const Devices: React.FC = () => {
 
   async function handleBulkUpload() {
     if (bulkImportedRows.length === 0) {
-      toast.error("Choose an Excel file (.xlsx or .xls) to import first.");
+      toast.error(t("devices.bulkChooseFirst"));
       return;
     }
     const validation = validateRows(bulkImportedRows);
@@ -409,15 +411,15 @@ const Devices: React.FC = () => {
       setBulkSelectedFile(null);
       setBulkExcelPreviewDoc(null);
 
-      toast.success(`Devices added: uploaded ${res.uploaded}, rejected ${res.rejected}.`);
+      toast.success(t("devices.addSuccess", { uploaded: res.uploaded, rejected: res.rejected }));
       if ((res.rejected ?? 0) > 0 && res.fieldErrors && Object.keys(res.fieldErrors).length > 0) {
         const firstKey = Object.keys(res.fieldErrors)[0];
-        toast.error("Some entries were rejected.", {
+        toast.error(t("devices.rejectedPartial"), {
           description: `${firstKey}: ${res.fieldErrors[firstKey]}`,
         });
       }
     } catch (e) {
-      toast.error((e as Error)?.message ?? "Could not register devices from this file");
+      toast.error((e as Error)?.message ?? t("devices.bulkRegisterFailed"));
     } finally {
       setBulkUploadSubmitting(false);
     }
@@ -427,8 +429,8 @@ const Devices: React.FC = () => {
     <div className="space-y-6 animate-slide-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Devices</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage registered hardware devices</p>
+          <h1 className="text-2xl font-bold text-foreground">{t("devices.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("devices.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -438,7 +440,7 @@ const Devices: React.FC = () => {
             disabled={isLoading || addDeviceSubmitting || bulkUploadSubmitting}
           >
             <Plus className="mr-2 h-4 w-4" />
-            Add one device
+            {t("devices.addOne")}
           </Button>
           <Button
             type="button"
@@ -446,7 +448,7 @@ const Devices: React.FC = () => {
             disabled={isLoading || addDeviceSubmitting || bulkUploadSubmitting}
           >
             <Upload className="mr-2 h-4 w-4" />
-            Bulk Upload
+            {t("devices.bulkUpload")}
           </Button>
         </div>
       </div>
@@ -457,11 +459,11 @@ const Devices: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search devices..."
+              placeholder={t("devices.searchPlaceholder")}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9 pr-9"
-              aria-label="Search devices"
+              aria-label={t("devices.searchPlaceholder")}
             />
             {search.length > 0 && (
               <Button
@@ -470,7 +472,7 @@ const Devices: React.FC = () => {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={() => { setSearch(""); setPage(1); }}
-                aria-label="Clear search"
+                aria-label={t("common.clearSearch")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -478,7 +480,7 @@ const Devices: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Assignment:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("devices.assignmentLabel")}</span>
             <Select
               value={assignmentFilter}
               onValueChange={(v) => {
@@ -487,36 +489,36 @@ const Devices: React.FC = () => {
               }}
             >
               <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Assignment" />
+                <SelectValue placeholder={t("common.assignment")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
+                <SelectItem value="all">{t("common.all")}</SelectItem>
+                <SelectItem value="assigned">{t("common.assigned")}</SelectItem>
+                <SelectItem value="unassigned">{t("common.unassigned")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("common.clearFilters")}
             </Button>
           )}
         </div>
         {hasActiveFilters && (
           <p className="text-xs text-muted-foreground mt-2">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
+            {t("common.resultsFound", { count: filtered.length })}
           </p>
         )}
       </div>
 
-      {isLoading && <LoadingCard message="Loading devices…" />}
+      {isLoading && <LoadingCard message={t("devices.loading")} />}
 
       {!isLoading && devices.length === 0 && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Monitor className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No devices yet</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("devices.emptyTitle")}</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            Use the top-right buttons to register new devices (single add or bulk upload).
+            {t("devices.emptyHint")}
           </p>
         </div>
       )}
@@ -524,10 +526,10 @@ const Devices: React.FC = () => {
       {!isLoading && devices.length > 0 && hasActiveFilters && filtered.length === 0 && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching devices</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("devices.noMatchTitle")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("common.tryDifferentSearch")}</p>
           <Button variant="outline" className="mt-4" onClick={clearFilters}>
-            Clear filters
+            {t("common.clearFilters")}
           </Button>
         </div>
       )}
@@ -537,12 +539,12 @@ const Devices: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">S/N</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Patient</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Pouches</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Pharmacy</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Caregiver</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("devices.colSN")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("devices.colPatient")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">{t("devices.colPouches")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">{t("devices.colPharmacy")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">{t("devices.colCaregiver")}</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("devices.colActions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -590,7 +592,7 @@ const Devices: React.FC = () => {
                           setRemoveDeviceId(device.id);
                           setRemoveDeviceOpen(true);
                         }}
-                        aria-label="Remove device"
+                        aria-label={t("devices.removeAria")}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -602,7 +604,7 @@ const Devices: React.FC = () => {
           </table>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
               <Select
                 value={String(pageSize)}
                 onValueChange={(v) => {
@@ -623,7 +625,7 @@ const Devices: React.FC = () => {
               </Select>
             </div>
             <p className="text-sm text-muted-foreground">
-              Showing {startItem} to {endItem} of {filtered.length} results
+              {t("common.showingRange", { start: startItem, end: endItem, total: filtered.length })}
             </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
@@ -633,10 +635,10 @@ const Devices: React.FC = () => {
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
                 >
-                  Previous
+                  {t("common.previous")}
                 </Button>
                 <span className="text-sm text-muted-foreground px-1">
-                  Page {safePage} of {totalPages}
+                  {t("pagination.pageOf", { page: safePage, total: totalPages })}
                 </span>
                 <Button
                   variant="outline"
@@ -644,7 +646,7 @@ const Devices: React.FC = () => {
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
                 >
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             )}
@@ -661,21 +663,20 @@ const Devices: React.FC = () => {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add one device</DialogTitle>
+            <DialogTitle>{t("devices.addDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Register a single device by its device ID. Unassigned devices are visible to all pharmacies until
-              assigned to a patient.
+              {t("devices.addDialogDesc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
-              <Label htmlFor="addDeviceId">Device ID</Label>
+              <Label htmlFor="addDeviceId">{t("devices.deviceId")}</Label>
               <Input
                 id="addDeviceId"
                 value={addDeviceId}
                 onChange={(e) => setAddDeviceId(e.target.value)}
-                placeholder="e.g. DEV-12345"
+                placeholder={t("devices.deviceIdPlaceholder")}
                 disabled={addDeviceSubmitting}
                 autoComplete="off"
               />
@@ -684,10 +685,10 @@ const Devices: React.FC = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDeviceOpen(false)} disabled={addDeviceSubmitting}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={handleAddDevice} disabled={addDeviceSubmitting}>
-              {addDeviceSubmitting ? "Adding..." : "Add device"}
+              {addDeviceSubmitting ? t("common.adding") : t("devices.addDeviceSubmit")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -711,16 +712,15 @@ const Devices: React.FC = () => {
           }
         >
           <DialogHeader>
-            <DialogTitle>Bulk upload</DialogTitle>
+            <DialogTitle>{t("devices.bulkTitle")}</DialogTitle>
             <DialogDescription>
-              <span className="font-medium text-foreground">.xlsx</span> or <span className="font-medium text-foreground">.xls</span>
-              — first sheet, column <span className="font-medium text-foreground">Device ID</span>, one row per device.
+              {t("devices.bulkDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="bulkSheet">File</Label>
+              <Label htmlFor="bulkSheet">{t("common.file")}</Label>
               <input
                 id="bulkSheet"
                 type="file"
@@ -733,7 +733,7 @@ const Devices: React.FC = () => {
                   setBulkImporting(true);
                   try {
                     if (!EXCEL_FILENAME_RE.test(file.name)) {
-                      toast.error("Please choose an Excel file (.xlsx or .xls).");
+                      toast.error(t("devices.excelOnly"));
                       setBulkImportedRows([]);
                       setBulkSelectedFile(null);
                       setBulkExcelPreviewDoc(null);
@@ -741,7 +741,7 @@ const Devices: React.FC = () => {
                     }
                     const parsed = await parseBulkFile(file);
                     if (parsed.length === 0) {
-                      toast.error("No valid rows found in this Excel file.");
+                      toast.error(t("devices.noValidRows"));
                       setBulkImportedRows([]);
                       setBulkSelectedFile(null);
                       setBulkExcelPreviewDoc(null);
@@ -750,9 +750,14 @@ const Devices: React.FC = () => {
                     setBulkExcelPreviewDoc(null);
                     setBulkImportedRows(parsed);
                     setBulkSelectedFile(file);
-                    toast.success(`Imported ${parsed.length} row${parsed.length !== 1 ? "s" : ""}. Click Upload to register.`);
+                    toast.success(
+                      t("common.importedRowsHint", {
+                        count: parsed.length,
+                        rowWord: t(parsed.length === 1 ? "common.row" : "common.row_plural"),
+                      })
+                    );
                   } catch (err) {
-                    toast.error((err as Error)?.message ?? "Could not read this Excel file.");
+                    toast.error((err as Error)?.message ?? t("devices.couldNotReadExcel"));
                     setBulkImportedRows([]);
                     setBulkSelectedFile(null);
                     setBulkExcelPreviewDoc(null);
@@ -766,21 +771,20 @@ const Devices: React.FC = () => {
                 <div className="space-y-1">
                   <button
                     type="button"
-                    title={bulkExcelPreviewDoc ? "Hide preview" : "Show preview"}
+                    title={bulkExcelPreviewDoc ? t("common.hidePreview") : t("common.showPreview")}
                     className="text-left text-sm font-medium text-primary hover:underline focus:outline-none focus:underline"
                     onClick={() => void toggleBulkExcelPreview()}
                   >
                     {bulkSelectedFile.name}
                   </button>
                   <p className="text-xs text-muted-foreground">
-                    {bulkImportedRows.length} row{bulkImportedRows.length !== 1 ? "s" : ""}
-                    {" · "}
-                    <span className="text-muted-foreground/90">click name to preview the sheet here</span>
+                    {t("common.resultsFound", { count: bulkImportedRows.length })}{" · "}
+                    <span className="text-muted-foreground/90">{t("common.clickNamePreview")}</span>
                   </p>
                   {bulkExcelPreviewDoc ? (
                     <div className="mt-2 rounded-md border bg-background overflow-hidden shrink-0 min-h-0 flex flex-col">
                       <iframe
-                        title="Excel preview"
+                        title={t("common.excelPreviewTitle")}
                         srcDoc={bulkExcelPreviewDoc}
                         sandbox="allow-same-origin"
                         className="w-full h-[min(55vh,420px)] border-0 bg-white dark:bg-card"
@@ -798,13 +802,13 @@ const Devices: React.FC = () => {
               onClick={() => setBulkUploadOpen(false)}
               disabled={bulkUploadSubmitting || bulkImporting}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleBulkUpload}
               disabled={bulkUploadSubmitting || bulkImporting || bulkImportedRows.length === 0}
             >
-              {bulkUploadSubmitting ? "Uploading..." : bulkImporting ? "Reading…" : "Upload"}
+              {bulkUploadSubmitting ? t("common.uploading") : bulkImporting ? t("common.reading") : t("common.upload")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -820,11 +824,11 @@ const Devices: React.FC = () => {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Remove device</DialogTitle>
+            <DialogTitle>{t("devices.removeTitle")}</DialogTitle>
             <DialogDescription>
               {removeDeviceId
-                ? `Remove ${removeDeviceId} from the system.`
-                : "Remove this device from the system."}
+                ? t("devices.removeDesc", { id: removeDeviceId })
+                : t("devices.removeDescGeneric")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -835,7 +839,7 @@ const Devices: React.FC = () => {
                 setRemoveDeviceId(null);
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -846,18 +850,18 @@ const Devices: React.FC = () => {
                   await adminApi.removeDevice(removeDeviceId);
                   await queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
                   await queryClient.refetchQueries({ queryKey: ["admin", "devices"], exact: true });
-                  toast.success("Device removed");
+                  toast.success(t("devices.removedToast"));
                   setRemoveDeviceOpen(false);
                   setRemoveDeviceId(null);
                 } catch (e) {
-                  toast.error((e as Error)?.message ?? "Failed to remove device");
+                  toast.error((e as Error)?.message ?? t("devices.removeFailed"));
                 } finally {
                   setRemoveDeviceSubmitting(false);
                 }
               }}
               disabled={removeDeviceSubmitting}
             >
-              {removeDeviceSubmitting ? "Removing..." : "Remove"}
+              {removeDeviceSubmitting ? t("common.removing") : t("common.remove")}
             </Button>
           </DialogFooter>
         </DialogContent>

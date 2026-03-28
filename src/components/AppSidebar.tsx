@@ -1,5 +1,6 @@
 import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale, localeLabels, supportedLocales, type AppLocale } from "@/contexts/LocaleContext";
 import {
@@ -26,13 +27,13 @@ import {
 } from "@/components/ui/select";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/devices", icon: Monitor, label: "Devices" },
-  { to: "/user-management/caregivers", icon: Users, label: "Caregivers" },
-  { to: "/user-management/pharmacy", icon: Building2, label: "Pharmacies" },
-  { to: "/help-support", icon: HelpCircle, label: "Help & Support" },
-  { to: "/logs", icon: BarChart3, label: "Logs & Analytics" },
-  { to: "/system-config", icon: Settings2, label: "System Config" },
+  { to: "/", icon: LayoutDashboard, labelKey: "nav.dashboard" as const },
+  { to: "/devices", icon: Monitor, labelKey: "nav.devices" as const },
+  { to: "/user-management/caregivers", icon: Users, labelKey: "nav.caregivers" as const },
+  { to: "/user-management/pharmacy", icon: Building2, labelKey: "nav.pharmacies" as const },
+  { to: "/help-support", icon: HelpCircle, labelKey: "nav.helpSupport" as const },
+  { to: "/logs", icon: BarChart3, labelKey: "nav.logsAnalytics" as const },
+  { to: "/system-config", icon: Settings2, labelKey: "nav.systemConfig" as const },
 ];
 
 interface AppSidebarProps {
@@ -41,6 +42,7 @@ interface AppSidebarProps {
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { locale, setLocale } = useLocale();
   const location = useLocation();
@@ -59,7 +61,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold text-sidebar-foreground truncate">
-            Navos ZET
+            {t("app.brand")}
           </span>
         )}
       </div>
@@ -71,7 +73,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
             (item.to !== "/" && location.pathname.startsWith(item.to));
           return (
             <NavLink
-              key={item.to}
+              key={item.labelKey}
               to={item.to}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
@@ -81,7 +83,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
               )}
             >
               <item.icon className="h-5 w-5 shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && <span className="truncate">{t(item.labelKey)}</span>}
             </NavLink>
           );
         })}
@@ -94,7 +96,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
             <Select value={locale} onValueChange={(v) => setLocale(v as AppLocale)}>
               <SelectTrigger className="h-9 bg-sidebar border-sidebar-border text-sidebar-fg">
                 <Languages className="h-4 w-4 shrink-0 mr-2" />
-                <SelectValue placeholder="Language" />
+                <SelectValue placeholder={t("common.language")} />
               </SelectTrigger>
               <SelectContent>
                 {supportedLocales.map((code) => (

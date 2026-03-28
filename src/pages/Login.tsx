@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminApiError } from "@/api/client";
 import { adminApi } from "@/api/admin";
@@ -10,6 +11,7 @@ import { Pill, Eye, EyeOff, ArrowLeft } from "lucide-react";
 type Step = "login" | "forgot-request";
 
 const Login: React.FC = () => {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const [step, setStep] = useState<Step>("login");
   const [email, setEmail] = useState("");
@@ -23,7 +25,7 @@ const Login: React.FC = () => {
     e.preventDefault();
     if (step === "login") {
       if (!email || !password) {
-        setError("Please enter both email and password");
+        setError(t("login.errBothRequired"));
         return;
       }
       setLoading(true);
@@ -31,9 +33,9 @@ const Login: React.FC = () => {
       setSuccess("");
       try {
         const ok = await login(email, password);
-        if (!ok) setError("Invalid email or password.");
+        if (!ok) setError(t("login.errInvalid"));
       } catch (e) {
-        setError(e instanceof AdminApiError ? e.message : "Login failed. Please try again.");
+        setError(e instanceof AdminApiError ? e.message : t("login.errLoginFailed"));
       } finally {
         setLoading(false);
       }
@@ -41,7 +43,7 @@ const Login: React.FC = () => {
     }
     if (step === "forgot-request") {
       if (!email?.trim()) {
-        setError("Please enter your email");
+        setError(t("login.errEmailRequired"));
         return;
       }
       setLoading(true);
@@ -49,9 +51,9 @@ const Login: React.FC = () => {
       setSuccess("");
       try {
         await adminApi.forgotPassword(email.trim());
-        setSuccess("If an account exists for this email, you will receive a reset link. Check your inbox and spam.");
+        setSuccess(t("login.resetSent"));
       } catch (e) {
-        setError(e instanceof AdminApiError ? e.message : "Failed to send reset link.");
+        setError(e instanceof AdminApiError ? e.message : t("login.errResetSend"));
       } finally {
         setLoading(false);
       }
@@ -77,10 +79,10 @@ const Login: React.FC = () => {
             <Pill className="h-10 w-10 text-primary-foreground" />
           </div>
           <h1 className="mb-4 text-4xl font-bold text-primary-foreground tracking-tight">
-            Navos ZET
+            {t("app.brand")}
           </h1>
           <p className="text-lg text-sidebar-fg/70">
-            Admin Panel — Oversee devices, caregivers, and system configuration across the Navos ZET platform.
+            {t("login.heroSubtitle")}
           </p>
         </div>
       </div>
@@ -92,16 +94,16 @@ const Login: React.FC = () => {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
               <Pill className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">Navos ZET</span>
+            <span className="text-xl font-bold text-foreground">{t("app.brand")}</span>
           </div>
 
           <h2 className="mb-2 text-2xl font-bold text-foreground">
-            {step === "login" && "Welcome back"}
-            {step === "forgot-request" && "Reset password"}
+            {step === "login" && t("login.welcomeBack")}
+            {step === "forgot-request" && t("login.resetPasswordHeading")}
           </h2>
           <p className="mb-8 text-muted-foreground">
-            {step === "login" && "Sign in to Navos ZET"}
-            {step === "forgot-request" && "Enter your email to receive a reset link."}
+            {step === "login" && t("login.signInToNavos")}
+            {step === "forgot-request" && t("login.enterEmailReset")}
           </p>
 
           {step === "forgot-request" && (
@@ -113,17 +115,17 @@ const Login: React.FC = () => {
               onClick={backToLogin}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to sign in
+              {t("login.backToSignIn")}
             </Button>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("common.email")}</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@example.com"
+                placeholder={t("login.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-11"
@@ -133,7 +135,7 @@ const Login: React.FC = () => {
 
             {step === "login" && (
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("common.password")}</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -149,7 +151,7 @@ const Login: React.FC = () => {
                     size="icon"
                     className="absolute right-0 top-0 h-11 w-10 text-muted-foreground hover:text-foreground"
                     onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t("common.hidePassword") : t("common.showPassword")}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
@@ -163,7 +165,7 @@ const Login: React.FC = () => {
             {step === "login" && (
               <div className="flex flex-col gap-3">
                 <Button type="submit" className="w-full h-11" disabled={loading}>
-                  {loading ? "Signing in..." : "Sign In"}
+                  {loading ? t("login.signingIn") : t("login.signIn")}
                 </Button>
                 <Button
                   type="button"
@@ -171,13 +173,13 @@ const Login: React.FC = () => {
                   className="w-full text-muted-foreground h-11"
                   onClick={goToForgot}
                 >
-                  Forgot password?
+                  {t("login.forgotPassword")}
                 </Button>
               </div>
             )}
             {step === "forgot-request" && (
               <Button type="submit" className="w-full h-11" disabled={loading}>
-                {loading ? "Sending..." : "Send reset link"}
+                {loading ? t("login.sending") : t("login.sendResetLink")}
               </Button>
             )}
           </form>

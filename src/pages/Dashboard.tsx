@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, HelpCircle, Bell, Package, UserCheck } from "lucide-react";
 import StatCard from "@/components/StatCard";
@@ -17,25 +18,8 @@ import { mapApiDeviceToDevice } from "@/api/deviceMappers";
 import type { Device } from "@/data/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
-function getDeviceStatusChartData(deviceStatus: {
-  online?: number;
-  offline?: number;
-  paused?: number;
-  stopped?: number;
-} | undefined) {
-  const online = deviceStatus?.online ?? 0;
-  const offline = deviceStatus?.offline ?? 0;
-  const paused = deviceStatus?.paused ?? 0;
-  const stopped = deviceStatus?.stopped ?? 0;
-  // Always return all buckets so the chart renders even at zero
-  return [
-    { name: "Online", value: online, color: "hsl(160, 84%, 39%)" },
-    { name: "Offline", value: offline, color: "hsl(var(--muted-foreground))" },
-    { name: "Paused/Stopped", value: paused + stopped, color: "hsl(38, 92%, 50%)" },
-  ];
-}
-
 const Dashboard: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
@@ -81,10 +65,18 @@ const Dashboard: React.FC = () => {
   );
   const pendingAlerts = dashboardData?.alerts?.unacknowledged ?? 0;
 
-  const deviceStatusChartData = useMemo(
-    () => getDeviceStatusChartData(dashboardData?.deviceStatus),
-    [dashboardData?.deviceStatus]
-  );
+  const deviceStatusChartData = useMemo(() => {
+    const ds = dashboardData?.deviceStatus;
+    const online = ds?.online ?? 0;
+    const offline = ds?.offline ?? 0;
+    const paused = ds?.paused ?? 0;
+    const stopped = ds?.stopped ?? 0;
+    return [
+      { name: t("dashboard.chartOnline"), value: online, color: "hsl(160, 84%, 39%)" },
+      { name: t("dashboard.chartOffline"), value: offline, color: "hsl(var(--muted-foreground))" },
+      { name: t("dashboard.chartPausedStopped"), value: paused + stopped, color: "hsl(38, 92%, 50%)" },
+    ];
+  }, [dashboardData?.deviceStatus, t]);
 
   const refillDevices = useMemo(
     () => assignedDevices.filter((d) => d.remainingPouches <= d.refillThreshold),
@@ -94,41 +86,41 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">System-wide overview of devices, caregivers, and alerts</p>
+        <h1 className="text-2xl font-bold text-foreground">{t("dashboard.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("dashboard.subtitle")}</p>
       </div>
 
       {/* Stats – all from API / derived from API data only */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Devices"
+          title={t("dashboard.totalDevices")}
           value={totalDevices}
           icon={<Monitor className="h-5 w-5 text-info" />}
-          trend="devices"
+          trend={t("dashboard.trendDevices")}
           variant="info"
           loading={isDashboardLoading}
         />
         <StatCard
-          title="Assigned devices"
+          title={t("dashboard.assignedDevices")}
           value={assignedDeviceCount}
           icon={<UserCheck className="h-5 w-5 text-success" />}
-          trend="with patient"
+          trend={t("dashboard.trendWithPatient")}
           variant="success"
           loading={isDashboardLoading}
         />
         <StatCard
-          title="Needs Refill"
+          title={t("dashboard.needsRefill")}
           value={needsRefillCount}
           icon={<Package className="h-5 w-5 text-warning" />}
-          trend="Below threshold"
+          trend={t("dashboard.trendBelowThreshold")}
           variant="warning"
           loading={isDashboardLoading}
         />
         <StatCard
-          title="Pending Alerts"
+          title={t("dashboard.pendingAlerts")}
           value={pendingAlerts}
           icon={<HelpCircle className="h-5 w-5 text-destructive" />}
-          trend="Unacknowledged"
+          trend={t("dashboard.trendUnacknowledged")}
           variant="destructive"
           loading={isDashboardLoading}
         />
@@ -136,10 +128,10 @@ const Dashboard: React.FC = () => {
 
       {/* Device status chart + refill / pending alerts (two columns on lg) */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Device Status</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t("dashboard.deviceStatus")}</h2>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border bg-card shadow-card p-5">
-            <h3 className="text-sm font-semibold text-card-foreground mb-4">Device Status Distribution</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-4">{t("dashboard.distribution")}</h3>
             {isDashboardLoading ? (
               <div className="p-5">
                 <div className="h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40 animate-pulse mb-4" />
@@ -180,11 +172,11 @@ const Dashboard: React.FC = () => {
             <div className="rounded-xl border bg-card shadow-card flex-1 flex flex-col min-h-0">
               <div className="flex items-center gap-2 border-b p-4 shrink-0">
                 <Bell className="h-4 w-4 text-warning" />
-                <h2 className="font-semibold text-card-foreground">Refill Alerts</h2>
+                <h2 className="font-semibold text-card-foreground">{t("dashboard.refillAlerts")}</h2>
               </div>
               <div className="divide-y flex-1 overflow-auto max-h-[280px]">
                 {refillDevices.length === 0 ? (
-                  <div className="p-4 text-center text-sm text-muted-foreground">No devices below threshold</div>
+                  <div className="p-4 text-center text-sm text-muted-foreground">{t("dashboard.noDevicesBelowThreshold")}</div>
                 ) : (
                   refillDevices.map((d) => (
                     <div
@@ -196,12 +188,12 @@ const Dashboard: React.FC = () => {
                         <p className="text-sm font-medium text-card-foreground">{d.patientName}</p>
                         {d.remainingPouches === 0 && (
                           <span className="text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
-                            Urgent
+                            {t("dashboard.urgent")}
                           </span>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {d.id} — {d.remainingPouches} pouches left
+                        {t("dashboard.pouchesLeft", { id: d.id, count: d.remainingPouches })}
                       </p>
                     </div>
                   ))
@@ -214,18 +206,20 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between border-b p-4">
                 <div className="flex items-center gap-2">
                   <HelpCircle className="h-4 w-4 text-info" />
-                  <h2 className="font-semibold text-card-foreground">Pending Alerts</h2>
+                  <h2 className="font-semibold text-card-foreground">{t("dashboard.pendingAlertsCard")}</h2>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => navigate("/help-support")}>
-                  View All
+                  {t("dashboard.viewAll")}
                 </Button>
               </div>
               <div className="p-4">
                 <p className="text-sm text-card-foreground">
-                  <span className="font-medium">{pendingAlerts}</span> unacknowledged alert{pendingAlerts !== 1 ? "s" : ""}
+                  {pendingAlerts === 1
+                    ? t("dashboard.unacknowledged_one", { count: pendingAlerts })
+                    : t("dashboard.unacknowledged_other", { count: pendingAlerts })}
                 </p>
                 {pendingAlerts === 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">No pending alerts</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t("dashboard.noPendingAlerts")}</p>
                 )}
               </div>
             </div>
@@ -236,14 +230,14 @@ const Dashboard: React.FC = () => {
       {/* Devices Overview – full width */}
       <div className="rounded-xl border bg-card shadow-card w-full">
         <div className="flex items-center justify-between border-b p-4">
-          <h2 className="font-semibold text-card-foreground">Devices Overview</h2>
+          <h2 className="font-semibold text-card-foreground">{t("dashboard.devicesOverview")}</h2>
           <Button variant="outline" size="sm" onClick={() => navigate("/devices")}>
-            View All
+            {t("dashboard.viewAll")}
           </Button>
         </div>
         <div className="divide-y">
           {devices.length === 0 ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">No devices</div>
+            <div className="p-8 text-center text-sm text-muted-foreground">{t("dashboard.noDevices")}</div>
           ) : (
             devices.map((device) => (
               <div
@@ -267,7 +261,7 @@ const Dashboard: React.FC = () => {
                     <p className="text-sm text-card-foreground">
                       {device.remainingPouches}/{device.totalPouches}
                     </p>
-                    <p className="text-xs text-muted-foreground">pouches</p>
+                    <p className="text-xs text-muted-foreground">{t("dashboard.pouches")}</p>
                   </div>
                   <StatusBadge status={device.status} />
                 </div>

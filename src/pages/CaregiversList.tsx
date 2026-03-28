@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, Search, Filter, X, Trash2, Pencil } from "lucide-react";
@@ -50,6 +51,7 @@ import { formatCaregiverDateTime } from "@/lib/caregiverDisplay";
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 const CaregiversList: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [removeTarget, setRemoveTarget] = useState<Caregiver | null>(null);
@@ -87,7 +89,7 @@ const CaregiversList: React.FC = () => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "caregivers"] });
-      toast.success("Caregiver updated");
+      toast.success(t("caregiversList.updatedToast"));
       setEditTarget(null);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -97,7 +99,7 @@ const CaregiversList: React.FC = () => {
     mutationFn: (id: string) => adminApi.deleteCaregiver(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "caregivers"] });
-      toast.success("Caregiver removed");
+      toast.success(t("caregiversList.removedToast"));
       setRemoveTarget(null);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -152,9 +154,9 @@ const CaregiversList: React.FC = () => {
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Caregivers</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("caregiversList.title")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Search, filter by status, edit details, or remove a caregiver.
+          {t("caregiversList.subtitle")}
         </p>
       </div>
 
@@ -164,14 +166,14 @@ const CaregiversList: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by name, email, or phone..."
+              placeholder={t("caregiversList.searchPlaceholder")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
               className="pl-9 pr-9"
-              aria-label="Search caregivers"
+              aria-label={t("caregiversList.searchPlaceholder")}
             />
             {search.length > 0 && (
               <Button
@@ -180,7 +182,7 @@ const CaregiversList: React.FC = () => {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={() => { setSearch(""); setPage(1); }}
-                aria-label="Clear search"
+                aria-label={t("common.clearSearch")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -188,7 +190,7 @@ const CaregiversList: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Status:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("caregiversList.statusLabel")}</span>
             <Select
               value={statusFilter}
               onValueChange={(v: "all" | "active" | "inactive") => {
@@ -200,33 +202,33 @@ const CaregiversList: React.FC = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="all">{t("common.all")}</SelectItem>
+                <SelectItem value="active">{t("common.active")}</SelectItem>
+                <SelectItem value="inactive">{t("common.inactive")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("common.clearFilters")}
             </Button>
           )}
         </div>
         {hasActiveFilters && (
           <p className="text-xs text-muted-foreground mt-2">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
+            {t("common.resultsFound", { count: filtered.length })}
           </p>
         )}
       </div>
 
-      {isLoading && <LoadingCard message="Loading caregivers…" />}
+      {isLoading && <LoadingCard message={t("caregiversList.loading")} />}
 
       {!isLoading && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No caregivers yet</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("caregiversList.emptyTitle")}</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            Caregivers will appear here once they are registered.
+            {t("caregiversList.emptyHint")}
           </p>
         </div>
       )}
@@ -234,10 +236,10 @@ const CaregiversList: React.FC = () => {
       {!isLoading && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching caregivers</h2>
-          <p className="mt-2 text-sm text-muted-foreground">No caregivers match &quot;{search.trim()}&quot;.</p>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("caregiversList.noMatchTitle")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("caregiversList.noMatchForQuery", { q: search.trim() })}</p>
           <Button variant="outline" className="mt-4" onClick={clearFilters}>
-            Clear filters
+            {t("common.clearFilters")}
           </Button>
         </div>
       )}
@@ -247,14 +249,14 @@ const CaregiversList: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow className="border-b bg-muted/50 hover:bg-transparent">
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Caregiver ID</TableHead>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</TableHead>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</TableHead>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Phone</TableHead>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Linked devices</TableHead>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Last updated</TableHead>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</TableHead>
-                <TableHead className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("caregiversList.colId")}</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("caregiversList.colName")}</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("caregiversList.colEmail")}</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">{t("caregiversList.colPhone")}</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">{t("caregiversList.colLinked")}</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden xl:table-cell">{t("caregiversList.colUpdated")}</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("caregiversList.colStatus")}</TableHead>
+                <TableHead className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("caregiversList.colActions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="divide-y">
@@ -281,7 +283,7 @@ const CaregiversList: React.FC = () => {
                   </TableCell>
                   <TableCell className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
                     {caregiver.linkedDevices.length > 0
-                      ? `${caregiver.linkedDevices.length} device${caregiver.linkedDevices.length !== 1 ? "s" : ""}`
+                      ? t("caregiversList.devicesCount", { count: caregiver.linkedDevices.length })
                       : "—"}
                   </TableCell>
                   <TableCell className="px-4 py-3 text-sm text-muted-foreground hidden xl:table-cell">
@@ -297,8 +299,8 @@ const CaregiversList: React.FC = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-primary hover:text-primary"
-                        title="Edit caregiver"
-                        aria-label="Edit caregiver"
+                        title={t("caregiversList.editEditAria")}
+                        aria-label={t("caregiversList.editEditAria")}
                         onClick={() => setEditTarget(caregiver)}
                       >
                         <Pencil className="h-4 w-4" />
@@ -308,8 +310,8 @@ const CaregiversList: React.FC = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
-                        title="Remove caregiver"
-                        aria-label="Remove caregiver"
+                        title={t("caregiversList.removeAria")}
+                        aria-label={t("caregiversList.removeAria")}
                         disabled={deleteCaregiver.isPending}
                         onClick={() => setRemoveTarget(caregiver)}
                       >
@@ -325,24 +327,19 @@ const CaregiversList: React.FC = () => {
           <AlertDialog open={removeTarget != null} onOpenChange={(o) => !o && !deleteCaregiver.isPending && setRemoveTarget(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Remove caregiver?</AlertDialogTitle>
+                <AlertDialogTitle>{t("caregiversList.removeConfirmTitle")}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  {removeTarget ? (
-                    <>
-                      Permanently delete <span className="font-medium text-foreground">{removeTarget.name}</span> (
-                      {removeTarget.id}). This cannot be undone.
-                    </>
-                  ) : null}
+                  {removeTarget ? t("caregiversList.removeConfirmDesc", { name: removeTarget.name, id: removeTarget.id }) : null}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={deleteCaregiver.isPending}>Cancel</AlertDialogCancel>
+                <AlertDialogCancel disabled={deleteCaregiver.isPending}>{t("common.cancel")}</AlertDialogCancel>
                 <Button
                   variant="destructive"
                   disabled={deleteCaregiver.isPending || !removeTarget}
                   onClick={() => removeTarget && deleteCaregiver.mutate(removeTarget.id)}
                 >
-                  {deleteCaregiver.isPending ? "Removing…" : "Remove"}
+                  {deleteCaregiver.isPending ? t("common.removing") : t("common.remove")}
                 </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -356,12 +353,12 @@ const CaregiversList: React.FC = () => {
           >
             <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
               <DialogHeader>
-                <DialogTitle>Edit caregiver</DialogTitle>
-                <DialogDescription>Update name, email, and phone on file.</DialogDescription>
+                <DialogTitle>{t("caregiversList.editTitle")}</DialogTitle>
+                <DialogDescription>{t("caregiversList.editDesc")}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-2">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-caregiver-name">Name</Label>
+                  <Label htmlFor="edit-caregiver-name">{t("common.name")}</Label>
                   <Input
                     id="edit-caregiver-name"
                     value={editName}
@@ -370,7 +367,7 @@ const CaregiversList: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-caregiver-email">Email</Label>
+                  <Label htmlFor="edit-caregiver-email">{t("common.email")}</Label>
                   <Input
                     id="edit-caregiver-email"
                     type="email"
@@ -380,7 +377,7 @@ const CaregiversList: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-caregiver-phone">Phone</Label>
+                  <Label htmlFor="edit-caregiver-phone">{t("common.phone")}</Label>
                   <Input
                     id="edit-caregiver-phone"
                     type="tel"
@@ -392,13 +389,13 @@ const CaregiversList: React.FC = () => {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setEditTarget(null)} disabled={saveCaregiverEdit.isPending}>
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   onClick={() => {
                     if (!editTarget) return;
                     if (!editName.trim() || !editEmail.trim()) {
-                      toast.error("Name and email are required");
+                      toast.error(t("common.nameAndEmailRequired"));
                       return;
                     }
                     saveCaregiverEdit.mutate({
@@ -410,7 +407,7 @@ const CaregiversList: React.FC = () => {
                   }}
                   disabled={saveCaregiverEdit.isPending || !editName.trim() || !editEmail.trim()}
                 >
-                  {saveCaregiverEdit.isPending ? "Saving…" : "Save"}
+                  {saveCaregiverEdit.isPending ? t("common.saving") : t("common.save")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -418,7 +415,7 @@ const CaregiversList: React.FC = () => {
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
               <Select
                 value={String(pageSize)}
                 onValueChange={(v) => {
@@ -439,7 +436,7 @@ const CaregiversList: React.FC = () => {
               </Select>
             </div>
             <p className="text-sm text-muted-foreground">
-              Showing {startItem} to {endItem} of {filtered.length} results
+              {t("common.showingRange", { start: startItem, end: endItem, total: filtered.length })}
             </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
@@ -449,10 +446,10 @@ const CaregiversList: React.FC = () => {
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
                 >
-                  Previous
+                  {t("common.previous")}
                 </Button>
                 <span className="text-sm text-muted-foreground px-1">
-                  Page {safePage} of {totalPages}
+                  {t("pagination.pageOf", { page: safePage, total: totalPages })}
                 </span>
                 <Button
                   variant="outline"
@@ -460,7 +457,7 @@ const CaregiversList: React.FC = () => {
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
                 >
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             )}

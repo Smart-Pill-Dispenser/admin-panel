@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -54,6 +55,7 @@ function parseLogDate(ts: string): Date {
 }
 
 const DeviceDetail: React.FC = () => {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -97,9 +99,9 @@ const DeviceDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "devices"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "devices", id, "logs"] });
       setShowStopDialog(false);
-      toast.success("Dispensing stopped");
+      toast.success(t("deviceDetail.stoppedToast"));
     },
-    onError: (e: Error) => toast.error(e?.message ?? "Failed to stop dispensing"),
+    onError: (e: Error) => toast.error(e?.message ?? t("deviceDetail.stopFailed")),
   });
 
   const resumeMutation = useMutation({
@@ -110,9 +112,9 @@ const DeviceDetail: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "devices"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "devices", id, "logs"] });
-      toast.success("Dispensing resumed");
+      toast.success(t("deviceDetail.resumedToast"));
     },
-    onError: (e: Error) => toast.error(e?.message ?? "Failed to resume dispensing"),
+    onError: (e: Error) => toast.error(e?.message ?? t("deviceDetail.resumeFailed")),
   });
 
   const fromParam = logDateFrom ? `${logDateFrom}T00:00:00Z` : undefined;
@@ -176,15 +178,15 @@ const DeviceDetail: React.FC = () => {
   const logEndItem = Math.min(logSafePage * logPageSize, logs.length);
 
   if (devicesLoading || logsLoading) {
-    return <LoadingCard message="Loading device…" />;
+    return <LoadingCard message={t("deviceDetail.loading")} />;
   }
 
   if (!device && (devicesError || logsError)) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-destructive mb-4">Failed to load device.</p>
+        <p className="text-destructive mb-4">{t("deviceDetail.loadFailed")}</p>
         <Button variant="outline" onClick={() => navigate("/devices")}>
-          Back to Devices
+          {t("deviceDetail.backToDevices")}
         </Button>
       </div>
     );
@@ -193,9 +195,9 @@ const DeviceDetail: React.FC = () => {
   if (!device) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground mb-4">Device not found</p>
+        <p className="text-muted-foreground mb-4">{t("deviceDetail.notFound")}</p>
         <Button variant="outline" onClick={() => navigate("/devices")}>
-          Back to Devices
+          {t("deviceDetail.backToDevices")}
         </Button>
       </div>
     );
@@ -221,7 +223,7 @@ const DeviceDetail: React.FC = () => {
         onClick={() => navigate("/devices")}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ArrowLeft className="h-4 w-4" /> Back
+        <ArrowLeft className="h-4 w-4" /> {t("common.back")}
       </button>
 
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -245,7 +247,7 @@ const DeviceDetail: React.FC = () => {
               {device.status !== "stopped" ? (
                 <Button variant="destructive" type="button" onClick={() => setShowStopDialog(true)}>
                   <StopCircle className="mr-2 h-4 w-4" />
-                  Stop dispensing
+                  {t("deviceDetail.stopDispensing")}
                 </Button>
               ) : (
                 <Button
@@ -255,7 +257,7 @@ const DeviceDetail: React.FC = () => {
                   disabled={resumeMutation.isPending}
                 >
                   <Play className="mr-2 h-4 w-4" />
-                  {resumeMutation.isPending ? "Resuming…" : "Resume dispensing"}
+                  {resumeMutation.isPending ? t("deviceDetail.resuming") : t("deviceDetail.resumeDispensing")}
                 </Button>
               )}
             </>
@@ -267,7 +269,7 @@ const DeviceDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Package className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Remaining Pouches</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.remainingPouches")}</span>
           </div>
           <p className="text-xl font-bold text-card-foreground">
             {device.remainingPouches} / {device.totalPouches}
@@ -288,7 +290,7 @@ const DeviceDetail: React.FC = () => {
           </div>
           {needsRefill && (
             <p className="mt-2 text-xs font-medium text-destructive flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> Below refill threshold ({device.refillThreshold})
+              <AlertTriangle className="h-3 w-3" /> {t("deviceDetail.belowThreshold", { threshold: device.refillThreshold })}
             </p>
           )}
         </div>
@@ -296,7 +298,7 @@ const DeviceDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Last Dispensed</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.lastDispensed")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{device.lastDispensed || "—"}</p>
         </div>
@@ -304,7 +306,7 @@ const DeviceDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <User className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Caregiver</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.caregiver")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{device.assignedCaregiver || "—"}</p>
         </div>
@@ -312,7 +314,7 @@ const DeviceDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Pharmacy</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.pharmacy")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{device.pharmacyName || "—"}</p>
         </div>
@@ -320,18 +322,18 @@ const DeviceDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card sm:col-span-2 lg:col-span-4">
           <div className="flex items-center gap-2 mb-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Validity</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.validity")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{device.issueDate || "—"}</p>
-          <p className="text-xs text-muted-foreground">to {device.validityDate || "—"}</p>
+          <p className="text-xs text-muted-foreground">{t("deviceDetail.to")} {device.validityDate || "—"}</p>
         </div>
       </div>
 
       <div className="rounded-xl border bg-card shadow-card overflow-hidden">
         <div className="border-b bg-muted/30 p-4 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="font-semibold text-card-foreground">Activity Logs</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Chronological order (newest first).</p>
+            <h2 className="font-semibold text-card-foreground">{t("deviceDetail.activityLogs")}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("deviceDetail.logsHint")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 flex-wrap">
@@ -339,14 +341,14 @@ const DeviceDetail: React.FC = () => {
                 className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
                 value={logDateFrom}
                 onChange={(e) => setLogDateFrom(e.target.value)}
-                aria-label="From date"
+                aria-label={t("common.fromDate")}
               />
               <span className="text-muted-foreground text-sm shrink-0">–</span>
               <DateInput
                 className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
                 value={logDateTo}
                 onChange={(e) => setLogDateTo(e.target.value)}
-                aria-label="To date"
+                aria-label={t("common.toDate")}
               />
             </div>
             {(logDateFrom || logDateTo) && (
@@ -360,7 +362,7 @@ const DeviceDetail: React.FC = () => {
                   setLogPage(1);
                 }}
               >
-                Clear dates
+                {t("common.clearDates")}
               </Button>
             )}
           </div>
@@ -369,7 +371,7 @@ const DeviceDetail: React.FC = () => {
           <div className="p-12 text-center">
             <FileText className="mx-auto h-10 w-10 text-muted-foreground/50" />
             <p className="mt-3 text-sm text-muted-foreground">
-              No activity logs for this device in the selected range.
+              {t("deviceDetail.noLogsRange")}
             </p>
           </div>
         ) : (
@@ -398,7 +400,7 @@ const DeviceDetail: React.FC = () => {
             </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
                 <Select
                   value={String(logPageSize)}
                   onValueChange={(v) => {
@@ -419,7 +421,7 @@ const DeviceDetail: React.FC = () => {
                 </Select>
               </div>
               <p className="text-sm text-muted-foreground">
-                Showing {logStartItem} to {logEndItem} of {logs.length} results
+                {t("common.showingRange", { start: logStartItem, end: logEndItem, total: logs.length })}
               </p>
               {logTotalPages > 1 && (
                 <div className="flex items-center gap-2">
@@ -430,10 +432,10 @@ const DeviceDetail: React.FC = () => {
                     onClick={() => setLogPage((p) => Math.max(1, p - 1))}
                     disabled={logSafePage <= 1}
                   >
-                    Previous
+                    {t("common.previous")}
                   </Button>
                   <span className="text-sm text-muted-foreground px-1">
-                    Page {logSafePage} of {logTotalPages}
+                    {t("pagination.pageOf", { page: logSafePage, total: logTotalPages })}
                   </span>
                   <Button
                     variant="outline"
@@ -442,7 +444,7 @@ const DeviceDetail: React.FC = () => {
                     onClick={() => setLogPage((p) => Math.min(logTotalPages, p + 1))}
                     disabled={logSafePage >= logTotalPages}
                   >
-                    Next
+                    {t("common.next")}
                   </Button>
                 </div>
               )}
@@ -454,16 +456,20 @@ const DeviceDetail: React.FC = () => {
       <Dialog open={showStopDialog} onOpenChange={setShowStopDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Stop dispensing</DialogTitle>
+            <DialogTitle>{t("deviceDetail.stopDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Stop dispensing for device {device.id}
-              {device.patientName && device.patientName !== "—" ? ` (${device.patientName})` : ""}? The patient will
-              not receive medication until dispensing is resumed.
+              {t("deviceDetail.stopDialogDesc", {
+                id: device.id,
+                patient:
+                  device.patientName && device.patientName !== "—"
+                    ? t("deviceDetail.stopDialogPatient", { name: device.patientName })
+                    : "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" type="button" onClick={() => setShowStopDialog(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -471,7 +477,7 @@ const DeviceDetail: React.FC = () => {
               onClick={() => stopMutation.mutate()}
               disabled={stopMutation.isPending}
             >
-              {stopMutation.isPending ? "Stopping…" : "Confirm stop"}
+              {stopMutation.isPending ? t("deviceDetail.stopping") : t("deviceDetail.confirmStop")}
             </Button>
           </DialogFooter>
         </DialogContent>

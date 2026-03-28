@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import {
   Settings2,
@@ -39,6 +40,7 @@ const statusIcon: Record<string, React.ReactNode> = {
 };
 
 const SystemConfig: React.FC = () => {
+  const { t } = useTranslation();
   const { data: devicesData } = useQuery({
     queryKey: ["admin", "devices", "for-system-config"],
     queryFn: () => adminApi.getDevices({ limit: 500 }),
@@ -130,9 +132,9 @@ const SystemConfig: React.FC = () => {
         <div className="flex items-center gap-2">
           <Settings2 className="h-7 w-7 text-muted-foreground" />
           <div>
-            <h1 className="text-2xl font-bold text-foreground">System Config (Engineering)</h1>
+            <h1 className="text-2xl font-bold text-foreground">{t("systemConfig.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Full technical logs per device.
+              {t("systemConfig.subtitle")}
             </p>
           </div>
         </div>
@@ -140,9 +142,9 @@ const SystemConfig: React.FC = () => {
 
       {/* Engineering logs section */}
       <div>
-        <h2 className="text-lg font-semibold text-card-foreground mb-4">Engineering logs</h2>
+        <h2 className="text-lg font-semibold text-card-foreground mb-4">{t("systemConfig.sectionTitle")}</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          This section previously showed dummy data. The backend currently exposes per-device logs (type/message/timestamp).
+          {t("systemConfig.sectionIntro")}
         </p>
       </div>
 
@@ -152,11 +154,11 @@ const SystemConfig: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by device, event, reason..."
+              placeholder={t("systemConfig.searchPlaceholder")}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9 pr-9"
-              aria-label="Search logs"
+              aria-label={t("systemConfig.searchPlaceholder")}
             />
             {search.length > 0 && (
               <Button
@@ -165,7 +167,7 @@ const SystemConfig: React.FC = () => {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={() => { setSearch(""); setPage(1); }}
-                aria-label="Clear search"
+                aria-label={t("common.clearSearch")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -173,13 +175,13 @@ const SystemConfig: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Device:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.device")}:</span>
             <Select value={deviceFilter} onValueChange={(v) => { setDeviceFilter(v); setPage(1); }}>
               <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Device" />
+                <SelectValue placeholder={t("systemConfig.devicePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All devices</SelectItem>
+                <SelectItem value="all">{t("logs.allDevices")}</SelectItem>
                 {devicesNewestFirst.map((d) => (
                   <SelectItem key={String(d.id)} value={String(d.id)}>
                     {String(d.id)}
@@ -197,7 +199,7 @@ const SystemConfig: React.FC = () => {
                 setDateFrom(e.target.value);
                 setPage(1);
               }}
-              aria-label="From date"
+              aria-label={t("common.fromDate")}
             />
             <span className="text-muted-foreground shrink-0">–</span>
             <DateInput
@@ -207,18 +209,18 @@ const SystemConfig: React.FC = () => {
                 setDateTo(e.target.value);
                 setPage(1);
               }}
-              aria-label="To date"
+              aria-label={t("common.toDate")}
             />
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("common.clearFilters")}
             </Button>
           )}
         </div>
         {hasActiveFilters && (
           <p className="text-xs text-muted-foreground mt-2">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
+            {t("common.resultsFound", { count: filtered.length })}
           </p>
         )}
       </div>
@@ -234,12 +236,12 @@ const SystemConfig: React.FC = () => {
           ) : (
             <>
               <h2 className="mt-4 text-lg font-semibold text-foreground">
-                {deviceFilter === "all" ? "Select a device to view logs" : "No logs yet"}
+                {deviceFilter === "all" ? t("systemConfig.selectDeviceTitle") : t("systemConfig.noLogsTitle")}
               </h2>
               <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
                 {deviceFilter === "all"
-                  ? "Choose a device above to load logs from the backend."
-                  : "Device logs will appear here as events occur."}
+                  ? t("systemConfig.selectDeviceHint")
+                  : t("systemConfig.noLogsHint")}
               </p>
             </>
           )}
@@ -249,10 +251,10 @@ const SystemConfig: React.FC = () => {
       {!isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching logs</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("systemConfig.noMatchTitle")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("common.tryDifferentSearch")}</p>
           <Button variant="outline" className="mt-4" onClick={clearFilters}>
-            Clear filters
+            {t("common.clearFilters")}
           </Button>
         </div>
       )}
@@ -263,12 +265,12 @@ const SystemConfig: React.FC = () => {
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="w-8 px-2 py-3" />
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Event</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Source</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("systemConfig.colTime")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("systemConfig.colDevice")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("systemConfig.colEvent")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("systemConfig.colStatus")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("systemConfig.colSource")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("systemConfig.colReason")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -301,10 +303,10 @@ const SystemConfig: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {statusIcon.unknown}
-                        <span className="text-sm capitalize">—</span>
+                        <span className="text-sm capitalize">{t("common.dash")}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">—</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{t("common.dash")}</td>
                     <td className="px-4 py-3 text-sm text-card-foreground max-w-[280px] truncate" title={log.reason}>
                       {log.reason}
                     </td>
@@ -313,7 +315,7 @@ const SystemConfig: React.FC = () => {
                     <tr className="bg-muted/20">
                       <td colSpan={7} className="px-4 py-4">
                         <div className="grid gap-4 sm:grid-cols-2 text-sm font-mono">
-                          <DetailBlock title="Message" value={log.reason} mono={false} className="sm:col-span-2" />
+                          <DetailBlock title={t("common.message")} value={log.reason} mono={false} className="sm:col-span-2" />
                         </div>
                       </td>
                     </tr>
@@ -325,7 +327,7 @@ const SystemConfig: React.FC = () => {
         </table>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
               <Select
                 value={String(pageSize)}
                 onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
@@ -343,7 +345,7 @@ const SystemConfig: React.FC = () => {
               </Select>
             </div>
             <p className="text-sm text-muted-foreground">
-              Showing {startItem} to {endItem} of {filtered.length} results
+              {t("common.showingRange", { start: startItem, end: endItem, total: filtered.length })}
             </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
@@ -353,10 +355,10 @@ const SystemConfig: React.FC = () => {
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
                 >
-                  Previous
+                  {t("common.previous")}
                 </Button>
                 <span className="text-sm text-muted-foreground px-1">
-                  Page {safePage} of {totalPages}
+                  {t("pagination.pageOf", { page: safePage, total: totalPages })}
                 </span>
                 <Button
                   variant="outline"
@@ -364,7 +366,7 @@ const SystemConfig: React.FC = () => {
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
                 >
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             )}

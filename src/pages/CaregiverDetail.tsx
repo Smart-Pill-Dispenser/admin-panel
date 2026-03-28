@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Users, Mail, Phone, Monitor, Building2, CalendarClock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +13,7 @@ import { formatCaregiverDateTime } from "@/lib/caregiverDisplay";
 import LoadingCard from "@/components/LoadingCard";
 
 const CaregiverDetail: React.FC = () => {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,15 +34,15 @@ const CaregiverDetail: React.FC = () => {
 
   if (!caregiver) {
     if (isLoading) {
-      return <LoadingCard message="Loading caregiver…" />;
+      return <LoadingCard message={t("caregiverDetail.loading")} />;
     }
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-muted-foreground mb-4">
-          Caregiver not found
+          {t("caregiverDetail.notFound")}
         </p>
         <Button variant="outline" onClick={() => navigate("/user-management/caregivers")}>
-          Back to Caregivers
+          {t("caregiverDetail.backToList")}
         </Button>
       </div>
     );
@@ -53,7 +55,7 @@ const CaregiverDetail: React.FC = () => {
         onClick={() => navigate("/user-management/caregivers")}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ArrowLeft className="h-4 w-4" /> Back
+        <ArrowLeft className="h-4 w-4" /> {t("common.back")}
       </button>
 
       {/* Header */}
@@ -66,7 +68,7 @@ const CaregiverDetail: React.FC = () => {
             <h1 className="text-2xl font-bold text-foreground">{caregiver.name}</h1>
             <p className="text-sm text-muted-foreground">{caregiver.email}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Caregiver ID: <span className="font-mono">{caregiver.id}</span>
+              {t("caregiverDetail.caregiverId")} <span className="font-mono">{caregiver.id}</span>
             </p>
           </div>
         </div>
@@ -78,7 +80,7 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Email</span>
+            <span className="text-sm text-muted-foreground">{t("common.email")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{caregiver.email}</p>
         </div>
@@ -86,7 +88,7 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Phone className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Phone</span>
+            <span className="text-sm text-muted-foreground">{t("common.phone")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{caregiver.phone || "—"}</p>
         </div>
@@ -94,18 +96,18 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Monitor className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Linked devices</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.linkedDevices")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">
             {caregiver.linkedDevices.length > 0
               ? caregiver.linkedDevices.join(", ")
-              : "None"}
+              : t("common.none")}
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm text-muted-foreground">Status</span>
+            <span className="text-sm text-muted-foreground">{t("common.status")}</span>
           </div>
           <StatusBadge status={caregiver.status} />
         </div>
@@ -115,7 +117,7 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Organization</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.organization")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground font-mono break-all">
             {caregiver.organizationId?.trim() || "—"}
@@ -124,14 +126,14 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Record created</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.recordCreated")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{formatCaregiverDateTime(caregiver.createdAt)}</p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Last updated</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.lastUpdated")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{formatCaregiverDateTime(caregiver.updatedAt)}</p>
         </div>

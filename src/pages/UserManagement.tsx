@@ -1,16 +1,18 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Users, Building2, ChevronRight } from "lucide-react";
 
 const UserManagement: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("userManagement.title")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Manage caregivers and pharmacies. Open a list to view, search, and enable or disable users.
+          {t("userManagement.subtitle")}
         </p>
       </div>
 
@@ -25,9 +27,9 @@ const UserManagement: React.FC = () => {
               <Users className="h-6 w-6 text-accent-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-semibold text-foreground">Caregivers</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("userManagement.caregiversCardTitle")}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                View list, search, and manage caregiver access
+                {t("userManagement.caregiversCardDesc")}
               </p>
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -44,9 +46,9 @@ const UserManagement: React.FC = () => {
               <Building2 className="h-6 w-6 text-accent-foreground" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-semibold text-foreground">Pharmacies</h2>
+              <h2 className="text-lg font-semibold text-foreground">{t("userManagement.pharmaciesCardTitle")}</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                View list, search, and manage pharmacy access
+                {t("userManagement.pharmaciesCardDesc")}
               </p>
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />

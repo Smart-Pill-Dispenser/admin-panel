@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Building2, Mail } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import { adminApi } from "@/api/admin";
 import LoadingCard from "@/components/LoadingCard";
 
 const PharmacyDetail: React.FC = () => {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,13 +32,13 @@ const PharmacyDetail: React.FC = () => {
 
   if (!pharmacy) {
     if (isLoading) {
-      return <LoadingCard message="Loading pharmacy…" />;
+      return <LoadingCard message={t("pharmacyDetail.loading")} />;
     }
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground mb-4">Pharmacy not found</p>
+        <p className="text-muted-foreground mb-4">{t("pharmacyDetail.notFound")}</p>
         <Button variant="outline" onClick={() => navigate("/user-management/pharmacy")}>
-          Back to Pharmacies
+          {t("pharmacyDetail.backToList")}
         </Button>
       </div>
     );
@@ -49,7 +51,7 @@ const PharmacyDetail: React.FC = () => {
         onClick={() => navigate("/user-management/pharmacy")}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ArrowLeft className="h-4 w-4" /> Back
+        <ArrowLeft className="h-4 w-4" /> {t("common.back")}
       </button>
 
       {/* Header */}
@@ -71,14 +73,14 @@ const PharmacyDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Email</span>
+            <span className="text-sm text-muted-foreground">{t("common.email")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{pharmacy.email}</p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm text-muted-foreground">Status</span>
+            <span className="text-sm text-muted-foreground">{t("common.status")}</span>
           </div>
           <StatusBadge status={pharmacy.status} />
         </div>
