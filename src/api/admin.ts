@@ -178,4 +178,11 @@ export const adminApi = {
       { resolutionReason }
     );
   },
+
+  registerAlertNotifications(body: {
+    fcmToken?: string;
+    webPush?: { endpoint: string; keys: { p256dh: string; auth: string } };
+  }) {
+    return adminPost<{ ok?: boolean }>("admin/notifications/register", body);
+  },
 };

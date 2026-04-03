@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { adminEnsureFreshAccessToken, setAuthTokenGetter, setOnUnauthorized } from "@/api/client";
 import { adminApi } from "@/api/admin";
+import { tryRegisterAdminAlertWebPush } from "@/lib/alertWebPush";
 import { AdminApiError } from "@/api/client";
 
 const TOKEN_KEY = "admin_access_token";
@@ -49,6 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (token && u) {
         setIsAuthenticated(true);
         setUser(u);
+        void tryRegisterAdminAlertWebPush();
       } else {
         setIsAuthenticated(false);
         setUser(null);
@@ -83,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem(USER_KEY, JSON.stringify(u));
       setUser(u);
       setIsAuthenticated(true);
+      void tryRegisterAdminAlertWebPush();
       return true;
     } catch (err) {
       if (err instanceof AdminApiError && err.code === "UNAUTHENTICATED") {
