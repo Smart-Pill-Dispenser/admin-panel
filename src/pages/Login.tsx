@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
+import { startNotificationPermissionRequest } from "@/lib/alertWebPush";
 import { AdminApiError } from "@/api/client";
 import { adminApi } from "@/api/admin";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,12 @@ const Login: React.FC = () => {
         setError(t("login.errBothRequired"));
         return;
       }
+      const permissionPromise = startNotificationPermissionRequest();
       setLoading(true);
       setError("");
       setSuccess("");
       try {
+        await permissionPromise;
         const ok = await login(email, password);
         if (!ok) setError(t("login.errInvalid"));
       } catch (e) {

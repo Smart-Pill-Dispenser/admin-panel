@@ -11,14 +11,49 @@ function urlBase64ToUint8Array(base64String: string): BufferSource {
   return outputArray;
 }
 
-/** Subscribes this browser to Web Push and registers with admin-backend. Requires VITE_WEB_PUSH_VAPID_PUBLIC_KEY. */
+function vapidPublicKey(): string {
+  return (import.meta.env.VITE_WEB_PUSH_VAPID_PUBLIC_KEY as string | undefined)?.trim() ?? "";
+}
+
+function loopbackHost(): boolean {
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
+
+export function isBrowserNotificationContextOk(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.isSecureContext || loopbackHost();
+}
+
+/**
+ * Call synchronously from a click/submit handler (same synchronous turn as the event).
+ */
+export function startNotificationPermissionRequest(): Promise<NotificationPermission> {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return Promise.resolve("denied");
+  }
+  if (Notification.permission === "granted" || Notification.permission === "denied") {
+    return Promise.resolve(Notification.permission);
+  }
+  try {
+    return Notification.requestPermission();
+  } catch {
+    return Promise.resolve(Notification.permission);
+  }
+}
+
+function notificationGranted(): boolean {
+  return typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
+}
+
+/** Subscribes to Web Push and registers with admin-backend. Requires VITE_WEB_PUSH_VAPID_PUBLIC_KEY and granted notification permission. */
 export async function tryRegisterAdminAlertWebPush(): Promise<void> {
-  const vapid = (import.meta.env.VITE_WEB_PUSH_VAPID_PUBLIC_KEY as string | undefined)?.trim();
+  const vapid = vapidPublicKey();
   if (!vapid || typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
     return;
   }
-  const secure = window.isSecureContext || window.location.hostname === "localhost";
-  if (!secure) return;
+  if (!isBrowserNotificationContextOk()) return;
+  if (!notificationGranted()) return;
 
   try {
     const reg = await navigator.serviceWorker.register("/sw-push.js");
